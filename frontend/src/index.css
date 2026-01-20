@@ -1,0 +1,322 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  @apply bg-secondary-900 text-text-primary;
+  line-height: 1.6;
+  overflow-x: hidden;
+  /* Performance optimizations */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Fix viewport on mobile */
+@viewport {
+  width: device-width;
+  zoom: 1.0;
+}
+
+/* Smooth page transitions */
+#root > div {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+@layer components {
+  /* Button Styles */
+  .btn-primary {
+    @apply bg-primary-500 text-white px-6 py-3 rounded-lg font-semibold tracking-wide
+           hover:bg-primary-600 active:bg-primary-700
+           transform hover:scale-105 hover:shadow-neon-red
+           transition-all duration-300 shadow-medium
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-primary-500;
+  }
+
+  .btn-secondary {
+    @apply bg-surface text-text-primary border-2 border-primary-500 px-6 py-3 rounded-lg font-semibold tracking-wide
+           hover:bg-primary-500 hover:text-white hover:border-primary-500 hover:shadow-neon-red
+           transform hover:scale-105
+           transition-all duration-300 shadow-soft;
+  }
+
+  .btn-outline {
+    @apply border-2 border-text-tertiary text-text-primary px-6 py-3 rounded-lg font-semibold tracking-wide
+           hover:border-primary-500 hover:text-primary-500 hover:bg-surface-light
+           transition-all duration-300;
+  }
+
+  .btn-ghost {
+    @apply text-text-secondary px-6 py-3 rounded-lg font-medium
+           hover:bg-surface-light hover:text-text-primary
+           transition-all duration-200;
+  }
+
+  /* Input Styles */
+  .input-field {
+    @apply w-full px-4 py-3 border border-surface-light bg-surface text-text-primary rounded-lg
+           focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:bg-surface-light
+           transition-all duration-200 outline-none
+           placeholder:text-text-tertiary;
+  }
+
+  .input-error {
+    @apply border-primary-500 focus:ring-primary-500 focus:border-primary-500;
+  }
+
+  /* Card Styles */
+  .card {
+    @apply bg-surface border border-surface-light rounded-xl shadow-card p-6
+           hover:shadow-medium hover:border-text-tertiary/30
+           transition-all duration-300;
+  }
+
+  .card-hover {
+    @apply bg-surface border border-surface-light rounded-xl shadow-card p-6
+           hover:shadow-card-hover hover:border-primary-500 hover:-translate-y-1
+           transform transition-all duration-300 cursor-pointer;
+  }
+
+  /* Badge Styles */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+  }
+
+  .badge-success {
+    @apply bg-green-900/50 text-green-300 border border-green-700;
+  }
+
+  .badge-warning {
+    @apply bg-yellow-900/50 text-yellow-300 border border-yellow-700;
+  }
+
+  .badge-error {
+    @apply bg-primary-900/50 text-primary-300 border border-primary-700;
+  }
+
+  .badge-info {
+    @apply bg-blue-900/50 text-blue-300 border border-blue-700;
+  }
+
+  /* Container */
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Loading Spinner */
+  .spinner {
+    @apply inline-block w-6 h-6 border-4 border-surface-light border-t-primary-500 rounded-full animate-spin;
+  }
+
+  .spinner-lg {
+    @apply inline-block w-12 h-12 border-4 border-surface-light border-t-primary-500 rounded-full animate-spin;
+  }
+
+  /* Typography Helpers */
+  .heading-1 {
+    @apply font-display text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-text-primary;
+  }
+
+  .heading-2 {
+    @apply font-display text-3xl md:text-4xl font-bold tracking-tight text-text-primary;
+  }
+
+  .heading-3 {
+    @apply font-display text-2xl md:text-3xl font-bold tracking-tight text-text-primary;
+  }
+
+  .text-body {
+    @apply text-base text-text-secondary leading-relaxed;
+  }
+
+  .text-muted {
+    @apply text-sm text-text-tertiary;
+  }
+
+  /* Link Styles */
+  .link {
+    @apply text-primary-400 hover:text-primary-300 transition-colors duration-200 underline-offset-4 hover:underline;
+  }
+
+  /* Divider */
+  .divider {
+    @apply border-t border-surface-light my-6;
+  }
+
+  /* Focus Visible */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-secondary-900;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1E1E1E;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #EF4444;
+}
+
+/* Selection */
+::selection {
+  background-color: #EF4444;
+  color: #FFFFFF;
+}
+
+::-moz-selection {
+  background-color: #EF4444;
+  color: #FFFFFF;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Remove number input arrows */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* Mobile Responsive Improvements */
+@media (max-width: 640px) {
+  /* Reduce padding on mobile */
+  .container-custom {
+    @apply px-3;
+  }
+
+  /* Adjust card padding on mobile */
+  .card, .card-hover {
+    @apply p-4;
+  }
+
+  /* Make buttons full-width on mobile when in grid */
+  .btn-primary, .btn-secondary {
+    @apply text-sm px-4 py-2.5;
+  }
+
+  /* Improve touch targets (minimum 44x44px) */
+  button, a, input[type="button"], input[type="submit"] {
+    min-height: 44px;
+  }
+
+  /* Better form inputs on mobile */
+  .input-field {
+    @apply text-base; /* Prevents zoom on iOS */
+  }
+
+  /* Reduce heading sizes on mobile */
+  .heading-1 {
+    @apply text-3xl;
+  }
+
+  .heading-2 {
+    @apply text-2xl;
+  }
+
+  .heading-3 {
+    @apply text-xl;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .container-custom {
+    @apply px-5;
+  }
+}
+
+/* Performance: Reduce animations on low-end devices */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Optimize for print */
+@media print {
+  body {
+    @apply bg-white text-black;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Image loading optimization */
+img {
+  content-visibility: auto;
+}
+
+/* Better font loading */
+@font-face {
+  font-family: 'Inter';
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-display: swap;
+}

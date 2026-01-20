@@ -8,24 +8,38 @@ const {
   forgotPassword,
   verifyOTP,
   resetPassword,
+  verifyEmail,
+  resendVerificationOTP,
   setup2FA,
   verify2FA,
   disable2FA,
   googleCallback,
+  updateProfile,
+  changePassword,
+  uploadProfileImage,
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/authMiddleware');
 const { registerValidation, loginValidation } = require('../utils/validators');
-const { authLimiter, passwordResetLimiter } = require('../middlewares/rateLimiter');
+const {
+  authLimiter,
+  forgotPasswordLimiter,
+  verifyOtpLimiter,
+  resetPasswordLimiter,
+} = require('../middlewares/rateLimiter');
 
 // Public routes
 router.post('/register', authLimiter, registerValidation, register);
 router.post('/login', authLimiter, loginValidation, login);
-router.post('/forgot-password', passwordResetLimiter, forgotPassword);
-router.post('/verify-otp', passwordResetLimiter, verifyOTP);
-router.put('/reset-password/:resetToken', passwordResetLimiter, resetPassword);
+router.post('/verify-email', verifyOtpLimiter, verifyEmail);
+router.post('/resend-verification-otp', forgotPasswordLimiter, resendVerificationOTP);
+router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
+router.post('/verify-otp', verifyOtpLimiter, verifyOTP);
+router.put('/reset-password/:resetToken', resetPasswordLimiter, resetPassword);
 
 // Protected routes
 router.get('/me', protect, getMe);
+router.put('/profile', protect, uploadProfileImage.single('profileImage'), updateProfile);
+router.put('/change-password', protect, changePassword);
 
 // 2FA routes
 router.post('/2fa/setup', protect, setup2FA);

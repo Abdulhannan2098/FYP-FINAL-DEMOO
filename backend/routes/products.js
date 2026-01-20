@@ -11,11 +11,13 @@ const {
   approveProduct,
   upload3DModel,
   delete3DModel,
+  uploadProductImages,
 } = require('../controllers/productController');
 
 const { protect } = require('../middlewares/authMiddleware');
 const { authorize } = require('../middlewares/roleMiddleware');
-const { productValidation } = require('../utils/validators');
+const { productValidation, productUpdateValidation } = require('../utils/validators');
+const validateRequest = require('../middlewares/validateRequest');
 
 // Admin Routes (must be before /:id route to avoid conflict)
 router.get('/admin/all', protect, authorize('admin'), getAllProductsAdmin);
@@ -28,9 +30,9 @@ router.get('/', getAllProducts);
 router.get('/:id', getProductById);
 
 // Protected Routes
-router.post('/', protect, authorize('vendor'), productValidation, createProduct);
+router.post('/', protect, authorize('vendor'), uploadProductImages.array('images', 5), productValidation, validateRequest, createProduct);
 router.put('/:id/approve', protect, authorize('admin'), approveProduct);
-router.put('/:id', protect, authorize('vendor', 'admin'), updateProduct);
+router.put('/:id', protect, authorize('vendor', 'admin'), productUpdateValidation, validateRequest, updateProduct);
 router.delete('/:id', protect, authorize('vendor', 'admin'), deleteProduct);
 
 // 3D Model Routes

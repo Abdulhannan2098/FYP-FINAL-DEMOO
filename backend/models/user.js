@@ -41,9 +41,21 @@ const userSchema = new mongoose.Schema(
     avatar: {
       type: String, // Store profile picture URL from OAuth
     },
+    profileImage: {
+      type: String, // Store uploaded profile image path
+    },
     emailVerified: {
       type: Boolean,
       default: false, // OAuth users are auto-verified
+    },
+    // Email verification OTP fields
+    emailVerificationOTP: {
+      type: String,
+      select: false,
+    },
+    emailVerificationExpire: {
+      type: Date,
+      select: false,
     },
     role: {
       type: String,
@@ -55,6 +67,19 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
     address: {
+      street: String,
+      city: String,
+      state: String,
+      zipCode: String,
+      country: String,
+    },
+    // Vendor-specific fields
+    businessName: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Business name cannot exceed 100 characters'],
+    },
+    businessAddress: {
       street: String,
       city: String,
       state: String,
@@ -127,6 +152,25 @@ userSchema.methods.getResetPasswordToken = function () {
   this.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
 
   return resetToken;
+};
+
+// Generate email verification OTP (6-digit)
+userSchema.methods.getEmailVerificationOTP = function () {
+  const crypto = require('crypto');
+
+  // Generate 6-digit OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Hash OTP and set to emailVerificationOTP field
+  this.emailVerificationOTP = crypto
+    .createHash('sha256')
+    .update(otp)
+    .digest('hex');
+
+  // Set expire time (10 minutes for OTP)
+  this.emailVerificationExpire = Date.now() + 10 * 60 * 1000;
+
+  return otp;
 };
 
 module.exports = mongoose.model('User', userSchema);

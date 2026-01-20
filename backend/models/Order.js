@@ -1,7 +1,13 @@
 const mongoose = require('mongoose');
+const Counter = require('./Counter');
 
 const orderSchema = new mongoose.Schema(
   {
+    orderNumber: {
+      type: String,
+      unique: true,
+      index: true,
+    },
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -94,16 +100,32 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
-// Add initial status to history on creation
-orderSchema.pre('save', function (next) {
-  if (this.isNew) {
-    this.statusHistory.push({
-      status: this.status,
-      timestamp: new Date(),
-      updatedBy: this.customer,
-    });
+// Add initial status to history on creation + generate stable unique orderNumber
+orderSchema.pre('save', async function (next) {
+  try {
+    if (!this.orderNumber) {
+      const counter = await Counter.findByIdAndUpdate(
+        'orderNumber',
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+
+      const seq = Number(counter?.seq ?? 0);
+      this.orderNumber = `AS-${String(seq).padStart(10, '0')}`;
+    }
+
+    if (this.isNew) {
+      this.statusHistory.push({
+        status: this.status,
+        timestamp: new Date(),
+        updatedBy: this.customer,
+      });
+    }
+
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
 
 module.exports = mongoose.model('Order', orderSchema);

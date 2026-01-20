@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "AutoSphere Mobile",
+    "slug": "autosphere-mobile",
+    "scheme": "autosphere",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.autosphere.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.autosphere.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "apiUrl": "http://192.168.100.4:5000/api",
+      "googleExpoClientId": "",
+      "googleAndroidClientId": "",
+      "googleIosClientId": "",
+      "googleWebClientId": ""
+    }
+  }
+}

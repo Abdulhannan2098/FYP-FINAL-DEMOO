@@ -3,6 +3,29 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/user');
 const env = require('./env');
 
+const normalizeEmail = (value) => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (!normalized.includes('@')) return normalized;
+
+  const [localRaw, domainRaw] = normalized.split('@');
+  const domain = domainRaw || '';
+
+  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+    const localNoTag = localRaw.split('+')[0];
+    const localCanonical = localNoTag.replace(/\./g, '');
+    return `${localCanonical}@gmail.com`;
+  }
+
+  return normalized;
+};
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildLooseEmailMatch = (normalizedEmail) => {
+  const pattern = `^\\s*${escapeRegex(normalizedEmail)}\\s*$`;
+  return { $regex: pattern, $options: 'i' };
+};
+
 // Configure Google OAuth Strategy (only if credentials are provided)
 if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
   passport.use(
@@ -15,6 +38,9 @@ if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
       },
       async (accessToken, refreshToken, profile, done) => {
       try {
+        const emailRaw = profile?.emails?.[0]?.value;
+        const normalizedEmail = normalizeEmail(emailRaw);
+
         // Check if user already exists with this Google ID
         let user = await User.findOne({ authProviderId: profile.id, authProvider: 'google' });
 
@@ -24,7 +50,9 @@ if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
         }
 
         // Check if user exists with this email (from local registration)
-        const existingUser = await User.findOne({ email: profile.emails[0].value });
+        const existingUser =
+          (await User.findOne({ email: normalizedEmail })) ||
+          (await User.findOne({ email: buildLooseEmailMatch(normalizedEmail) }));
 
         if (existingUser) {
           // Link Google account to existing local account
@@ -39,7 +67,7 @@ if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
         // Create new user
         user = await User.create({
           name: profile.displayName,
-          email: profile.emails[0].value,
+          email: normalizedEmail,
           authProvider: 'google',
           authProviderId: profile.id,
           avatar: profile.photos && profile.photos[0] ? profile.photos[0].value : null,

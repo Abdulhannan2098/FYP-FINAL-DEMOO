@@ -1,17 +1,86 @@
 const Product = require('../models/Product');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configure multer for product image uploads
+const productStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = 'uploads/products';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'product-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const imageFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+
+  if (mimetype && extname) {
+    return cb(null, true);
+  } else {
+    cb(new Error('Only image files (JPEG, JPG, PNG) are allowed!'));
+  }
+};
+
+exports.uploadProductImages = multer({
+  storage: productStorage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB per image
+  fileFilter: imageFilter
+});
 
 // @desc    Create a new product (Vendor)
 // @route   POST /api/products
 // @access  Private (Vendor)
 exports.createProduct = async (req, res, next) => {
   try {
-    const { name, description, price, category, stock, images } = req.body;
+    const { name, description, price, category, stock } = req.body;
+
+    console.log('=== BACKEND: Product Creation Request ===');
+    console.log('Request body:', { name, description, price, category, stock });
+    console.log('Files received:', req.files?.length || 0);
+    if (req.files && req.files.length > 0) {
+      console.log('File details:', req.files.map(f => ({
+        filename: f.filename,
+        path: f.path,
+        size: f.size,
+        mimetype: f.mimetype
+      })));
+    }
 
     // Basic validation
     if (!name || !price || !category) {
       return res.status(400).json({
         success: false,
         message: 'Name, price, and category are required fields.',
+      });
+    }
+
+    // Handle images - either from file upload or URLs from body
+    let imageUrls = [];
+    
+    if (req.files && req.files.length > 0) {
+      // Images uploaded as files - store file paths
+      imageUrls = req.files.map(file => `/${file.path.replace(/\\/g, '/')}`);
+      console.log('Image URLs generated:', imageUrls);
+    } else if (req.body.images) {
+      // Images provided as URLs (for backward compatibility or external URLs)
+      imageUrls = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
+      console.log('Using provided URLs:', imageUrls);
+    }
+
+    if (imageUrls.length === 0) {
+      console.error('No images provided!');
+      return res.status(400).json({
+        success: false,
+        message: 'At least one product image is required.',
       });
     }
 
@@ -22,11 +91,19 @@ exports.createProduct = async (req, res, next) => {
       price,
       category,
       stock,
-      images,
+      images: imageUrls,
       vendor: req.user.id, // vendor from auth middleware
       approvalStatus: 'Pending',
       isApproved: false,
     });
+
+    console.log('Product created successfully:', {
+      id: product._id,
+      name: product.name,
+      images: product.images,
+      vendor: product.vendor
+    });
+    console.log('=== BACKEND: Product Creation Complete ===');
 
     res.status(201).json({
       success: true,
@@ -34,6 +111,15 @@ exports.createProduct = async (req, res, next) => {
       data: product,
     });
   } catch (error) {
+    console.error('BACKEND ERROR:', error);
+    // Clean up uploaded files if product creation fails
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
     next(error);
   }
 };
@@ -56,6 +142,8 @@ exports.getAllProducts = async (req, res, next) => {
       limit = 8,
     } = req.query;
 
+    const normalizedSearch = typeof search === 'string' ? search.trim() : '';
+
     let filter = {};
 
     // Only show approved products to public
@@ -66,8 +154,8 @@ exports.getAllProducts = async (req, res, next) => {
     if (category) filter.category = category;
 
     // PERFORMANCE: Use MongoDB text search instead of regex for better performance
-    if (search) {
-      filter.$text = { $search: search };
+    if (normalizedSearch) {
+      filter.$text = { $search: normalizedSearch };
     }
 
     // Price range filter
@@ -126,12 +214,12 @@ exports.getAllProducts = async (req, res, next) => {
         sortCriteria = { createdAt: 1 };
         break;
       default:
-        // Default: Show oldest products first (on page 1)
-        sortCriteria = { createdAt: 1 };
+        // Default: Show newest products first (on page 1)
+        sortCriteria = { createdAt: -1 };
     }
 
     // PERFORMANCE: If text search, add textScore to sort
-    if (search) {
+    if (normalizedSearch) {
       sortCriteria = { score: { $meta: 'textScore' }, ...sortCriteria };
     }
 
@@ -139,7 +227,6 @@ exports.getAllProducts = async (req, res, next) => {
     const [products, total] = await Promise.all([
       Product.find(filter)
         .select('name description price category stock images rating numReviews createdAt vendor')
-        .populate('vendor', 'name email')
         .sort(sortCriteria)
         .skip(startIndex)
         .limit(limitNum)
@@ -249,6 +336,23 @@ exports.deleteProduct = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this product',
+      });
+    }
+
+    // Clean up uploaded image files (only local uploads, not external URLs)
+    if (product.images && product.images.length > 0) {
+      product.images.forEach(imagePath => {
+        // Only delete files from our uploads directory
+        if (imagePath.startsWith('/uploads/products/')) {
+          const fullPath = path.join(__dirname, '..', imagePath);
+          if (fs.existsSync(fullPath)) {
+            try {
+              fs.unlinkSync(fullPath);
+            } catch (err) {
+              console.error('Error deleting image file:', err);
+            }
+          }
+        }
       });
     }
 
