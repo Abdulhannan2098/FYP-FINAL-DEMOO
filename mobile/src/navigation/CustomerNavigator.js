@@ -16,6 +16,8 @@ import ChatScreen from '../screens/customer/ChatScreen';
 import ProfileScreen from '../screens/customer/ProfileScreen';
 import EditProfileScreen from '../screens/customer/EditProfileScreen';
 import ChangePasswordScreen from '../screens/auth/ChangePasswordScreen';
+// AR Viewer Screen for 3D model preview
+import { ARViewerScreen } from '../ar';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -27,6 +29,7 @@ const HomeStack = () => (
     <Stack.Screen name="Wishlist" component={WishlistScreen} />
     <Stack.Screen name="Cart" component={CartScreen} />
     <Stack.Screen name="Checkout" component={CheckoutScreen} />
+    <Stack.Screen name="ARViewer" component={ARViewerScreen} />
   </Stack.Navigator>
 );
 
@@ -35,6 +38,7 @@ const ProductsStack = () => (
     <Stack.Screen name="ProductListMain" component={ProductListScreen} />
     <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
     <Stack.Screen name="Cart" component={CartScreen} />
+    <Stack.Screen name="ARViewer" component={ARViewerScreen} />
   </Stack.Navigator>
 );
 

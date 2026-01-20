@@ -7,7 +7,10 @@ import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import StarRating from '../components/StarRating';
 import ChatButton from '../components/chat/ChatButton.jsx';
-import AdvancedARViewer from '../components/ar/AdvancedARViewer';
+// Import the new Accurate AR Viewer (replaces AdvancedARViewer)
+import { AccurateARViewer } from '../ar';
+// Legacy import kept for reference - can be removed after testing
+// import AdvancedARViewer from '../components/ar/AdvancedARViewer';
 import { getPlaceholderImage } from '../utils/constants';
 import { formatPKR } from '../utils/currency';
 
@@ -493,9 +496,9 @@ const ProductDetail = () => {
         </div>
       </div>
 
-      {/* Advanced AR Viewer Modal */}
+      {/* Accurate AR Viewer Modal - Upgraded with smart car detection */}
       {showARViewer && (
-        <AdvancedARViewer
+        <AccurateARViewer
           product={product}
           onClose={() => setShowARViewer(false)}
         />

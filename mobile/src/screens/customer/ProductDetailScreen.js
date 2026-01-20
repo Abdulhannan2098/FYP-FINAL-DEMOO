@@ -163,7 +163,8 @@ const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const handleViewAR = () => {
-    Alert.alert('AR View', 'AR functionality will be implemented here');
+    // Navigate to the AR Viewer screen with the product data
+    navigation.navigate('ARViewer', { product });
   };
 
   const handleToggleWishlist = async () => {
