@@ -8,6 +8,9 @@ export default defineConfig({
     open: true,
     host: '0.0.0.0', // Listen on all network interfaces
     strictPort: true, // Don't try other ports if 5173 is in use
+    // HTTPS is required for AR/WebXR on mobile devices
+    // Using Vite's built-in self-signed certificate
+    https: false, // Set to true if you need HTTPS for AR testing
   },
   build: {
     // Optimize build output

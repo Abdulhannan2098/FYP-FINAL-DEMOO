@@ -63,6 +63,7 @@ const AccurateARViewer = ({ product, onClose }) => {
   const [selectedColor, setSelectedColor] = useState(AUTOMOTIVE_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showManualMode, setShowManualMode] = useState(false);
+  const [showCameraPreview, setShowCameraPreview] = useState(false); // For testing detection
 
   // Derived values
   const productType = getProductType(product);
@@ -191,6 +192,21 @@ const AccurateARViewer = ({ product, onClose }) => {
   // ============================================================================
 
   /**
+   * Toggle camera preview for testing detection
+   */
+  const toggleCameraPreview = useCallback(async () => {
+    if (showCameraPreview) {
+      // Stop camera
+      stopDetection();
+      setShowCameraPreview(false);
+    } else {
+      // Start camera and detection
+      setShowCameraPreview(true);
+      await startDetection();
+    }
+  }, [showCameraPreview]);
+
+  /**
    * Start detection loop
    */
   const startDetection = useCallback(async () => {
@@ -203,7 +219,7 @@ const AccurateARViewer = ({ product, onClose }) => {
     // Set up video stream for detection
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode: 'environment', width: 640, height: 480 },
       });
 
       if (videoRef.current) {
@@ -226,6 +242,7 @@ const AccurateARViewer = ({ product, onClose }) => {
     } catch (err) {
       console.error('[AccurateARViewer] Camera access error:', err);
       setShowManualMode(true);
+      setShowCameraPreview(false);
     }
   }, [isDetecting, detectionAttempts]);
 
@@ -337,10 +354,10 @@ const AccurateARViewer = ({ product, onClose }) => {
 
   return (
     <div style={styles.container}>
-      {/* Hidden video for detection */}
+      {/* Video for detection - visible when camera preview is active */}
       <video
         ref={videoRef}
-        style={styles.hiddenVideo}
+        style={showCameraPreview ? styles.cameraPreview : styles.hiddenVideo}
         playsInline
         muted
       />
@@ -417,14 +434,26 @@ const AccurateARViewer = ({ product, onClose }) => {
           )}
         </model-viewer>
 
-        {/* Detection Overlay (in AR mode) */}
-        {isInARMode && detection && placementGuide && (
+        {/* Detection Overlay (in AR mode or camera preview) */}
+        {(isInARMode || showCameraPreview) && detection && placementGuide && (
           <PlacementGuide
             detection={detection}
             guide={placementGuide}
             productType={productType}
             isPlacing={false}
           />
+        )}
+
+        {/* Camera Preview Status Bar */}
+        {showCameraPreview && (
+          <div style={styles.cameraStatusBar}>
+            <div style={styles.cameraStatusDot} className={detection?.detected ? 'detected' : ''} />
+            <span style={styles.cameraStatusText}>
+              {detection?.detected
+                ? `Car Detected (${Math.round(detection.confidence * 100)}%) - ${detection.viewAngle} view`
+                : 'Searching for car... Point camera at a vehicle'}
+            </span>
+          </div>
         )}
       </div>
 
@@ -442,6 +471,29 @@ const AccurateARViewer = ({ product, onClose }) => {
               <path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343" />
             </svg>
           </button>
+
+          {/* Camera Detection Test Button */}
+          {isDetectorReady && (
+            <button
+              style={{
+                ...styles.actionBtn,
+                backgroundColor: showCameraPreview ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.2)',
+              }}
+              onClick={toggleCameraPreview}
+              title={showCameraPreview ? 'Stop Camera' : 'Test Car Detection'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {showCameraPreview ? (
+                  <path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                ) : (
+                  <>
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </>
+                )}
+              </svg>
+            </button>
+          )}
 
           {/* Detection Status */}
           <button
@@ -613,6 +665,41 @@ const styles = {
     opacity: 0,
     pointerEvents: 'none',
   },
+  cameraPreview: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    zIndex: 5,
+  },
+  cameraStatusBar: {
+    position: 'absolute',
+    top: '16px',
+    left: '16px',
+    right: '16px',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: '12px',
+    padding: '12px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    zIndex: 10,
+    backdropFilter: 'blur(8px)',
+  },
+  cameraStatusDot: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: '#f59e0b',
+    animation: 'pulse 1.5s ease-in-out infinite',
+  },
+  cameraStatusText: {
+    color: 'white',
+    fontSize: '13px',
+    fontWeight: '500',
+  },
   arButton: {
     position: 'absolute',
     bottom: '100px',
@@ -781,6 +868,13 @@ if (typeof document !== 'undefined') {
     styleSheet.textContent = `
       @keyframes spin {
         to { transform: rotate(360deg); }
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      .detected {
+        background-color: #22c55e !important;
       }
       .active {
         background-color: #22c55e !important;
