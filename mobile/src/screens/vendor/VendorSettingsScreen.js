@@ -140,6 +140,12 @@ const VendorSettingsScreen = ({ navigation }) => {
           />
 
           <SettingItem
+            icon="wallet-outline"
+            title="Pricing Plans"
+            onPress={() => navigation.navigate('VendorPricing')}
+          />
+
+          <SettingItem
             icon="stats-chart-outline"
             title="Sales Reports"
             onPress={() => Alert.alert('Coming Soon', 'Sales reports feature')}

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
+import { getBackendBaseUrl } from '../utils/imageHelper';
 
 const SocketContext = createContext(null);
 
@@ -49,7 +50,7 @@ export const SocketProvider = ({ children }) => {
     console.log('🔄 Creating new socket connection for user:', user.id);
 
     // Create socket connection
-    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
+    const newSocket = io(getBackendBaseUrl(), {
       auth: {
         token: token
       },

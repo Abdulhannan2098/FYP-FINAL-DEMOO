@@ -60,7 +60,7 @@ export const orderService = {
    * @returns {Promise} Updated order
    */
   acceptOrder: async (orderId) => {
-    return orderService.updateOrderStatus(orderId, 'Accepted');
+    return orderService.updateOrderStatus(orderId, 'In Progress');
   },
 
   /**
@@ -71,8 +71,9 @@ export const orderService = {
    */
   rejectOrder: async (orderId, reason) => {
     const response = await apiClient.put(ENDPOINTS.UPDATE_ORDER_STATUS(orderId), {
-      status: 'Rejected',
-      vendorRejectionReason: reason,
+      status: 'Cancelled',
+      rejectionReason: reason,
+      note: reason,
     });
     return response.data;
   },

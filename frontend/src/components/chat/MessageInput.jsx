@@ -78,7 +78,10 @@ const MessageInput = ({ conversationId, recipientId }) => {
           formData.append('content', message.trim());
         }
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/chat/messages/upload`, {
+        const rawBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const apiBaseUrl = rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl}/api`;
+
+        const response = await fetch(`${apiBaseUrl}/chat/messages/upload`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,

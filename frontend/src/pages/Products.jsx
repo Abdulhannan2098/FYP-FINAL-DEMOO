@@ -24,12 +24,15 @@ const Products = () => {
   const [filters, setFilters] = useState({
     search: '',
     category: '',
+    vendorId: '',
     minPrice: '',
     maxPrice: '',
     minRating: '',
     sortBy: '',
     inStock: false,
   });
+  const [vendors, setVendors] = useState([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
 
@@ -92,6 +95,7 @@ const Products = () => {
     const searchText = (filters.search || '').trim();
     if (searchText) params.append('search', searchText);
     if (filters.category) params.append('category', filters.category);
+    if (filters.vendorId) params.append('vendorId', filters.vendorId);
     if (filters.minPrice) params.append('minPrice', filters.minPrice);
     if (filters.maxPrice) params.append('maxPrice', filters.maxPrice);
     if (filters.minRating) params.append('minRating', filters.minRating);
@@ -190,6 +194,32 @@ const Products = () => {
     };
   }, []);
 
+  // Load vendor options for vendor filter dropdown
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchVendors = async () => {
+      try {
+        setVendorsLoading(true);
+        const response = await api.get('/vendors');
+        if (!isMounted) return;
+        setVendors(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        if (!isMounted) return;
+        setVendors([]);
+        console.error('Failed to load vendor options:', err);
+      } finally {
+        if (isMounted) setVendorsLoading(false);
+      }
+    };
+
+    fetchVendors();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -222,11 +252,32 @@ const Products = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
   }, []);
 
+  const handlePriceWheel = useCallback((e) => {
+    // Prevent wheel increments/decrements when the number input is focused.
+    e.currentTarget.blur();
+  }, []);
+
+  const handlePriceChange = useCallback((key, value) => {
+    let nextValue = value;
+
+    if (nextValue !== '') {
+      const parsed = Number(nextValue);
+      if (Number.isNaN(parsed)) {
+        nextValue = '';
+      } else {
+        nextValue = String(Math.max(0, parsed));
+      }
+    }
+
+    handleFilterChange({ [key]: nextValue });
+  }, [handleFilterChange]);
+
   const clearAllFilters = useCallback(() => {
     lastFilterKeyRef.current = 'clear';
     setFilters({
       search: '',
       category: '',
+      vendorId: '',
       minPrice: '',
       maxPrice: '',
       minRating: '',
@@ -261,7 +312,13 @@ const Products = () => {
     });
   }, []);
 
-  const hasActiveFilters = filters.category || filters.minPrice || filters.maxPrice || filters.minRating || filters.sortBy || filters.inStock;
+  const selectedVendorName = vendors.find((vendor) => vendor.id === filters.vendorId)?.name || 'Selected Vendor';
+  const hasInvalidPriceRange =
+    filters.minPrice !== '' &&
+    filters.maxPrice !== '' &&
+    Number(filters.minPrice) > Number(filters.maxPrice);
+
+  const hasActiveFilters = filters.category || filters.vendorId || filters.minPrice || filters.maxPrice || filters.minRating || filters.sortBy || filters.inStock;
 
   return (
     <div className="min-h-screen bg-secondary-900">
@@ -445,7 +502,7 @@ const Products = () => {
                 <span className="hidden sm:inline">Filters</span>
                 {hasActiveFilters && (
                   <span className="ml-1 px-2 py-0.5 bg-white text-primary-700 rounded-full text-xs font-bold">
-                    {[filters.minPrice, filters.maxPrice, filters.minRating, filters.inStock].filter(Boolean).length}
+                    {[filters.vendorId, filters.minPrice, filters.maxPrice, filters.minRating, filters.inStock].filter(Boolean).length}
                   </span>
                 )}
               </button>
@@ -464,27 +521,56 @@ const Products = () => {
             {/* Advanced Filters Panel */}
             {showFiltersPanel && (
               <div className="bg-surface-light border border-surface-light rounded-xl p-5">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Vendor */}
+                  <div>
+                    <label className="block text-sm font-semibold text-text-primary mb-2">Vendor</label>
+                    <select
+                      value={filters.vendorId}
+                      onChange={(e) => handleFilterChange({ vendorId: e.target.value })}
+                      className="w-full bg-surface border border-surface-light rounded-lg px-3 py-2 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                      disabled={vendorsLoading}
+                    >
+                      <option value="">{vendorsLoading ? 'Loading vendors...' : 'All Vendors'}</option>
+                      {vendors.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Price Range */}
                   <div>
                     <label className="block text-sm font-semibold text-text-primary mb-2">Price Range</label>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
-                        placeholder="Min"
+                        min="0"
+                        step="1"
+                        placeholder="Enter minimum price"
                         value={filters.minPrice}
-                        onChange={(e) => handleFilterChange({ minPrice: e.target.value })}
+                        onWheel={handlePriceWheel}
+                        onChange={(e) => handlePriceChange('minPrice', e.target.value)}
                         className="w-full bg-surface border border-surface-light rounded-lg px-3 py-2 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                       <span className="text-text-tertiary">-</span>
                       <input
                         type="number"
-                        placeholder="Max"
+                        min="0"
+                        step="1"
+                        placeholder="Enter maximum price"
                         value={filters.maxPrice}
-                        onChange={(e) => handleFilterChange({ maxPrice: e.target.value })}
+                        onWheel={handlePriceWheel}
+                        onChange={(e) => handlePriceChange('maxPrice', e.target.value)}
                         className="w-full bg-surface border border-surface-light rounded-lg px-3 py-2 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                     </div>
+                    {hasInvalidPriceRange && (
+                      <p className="text-xs text-yellow-400 mt-2">
+                        Minimum price should be less than or equal to maximum price.
+                      </p>
+                    )}
                   </div>
 
                   {/* Minimum Rating */}
@@ -575,6 +661,25 @@ const Products = () => {
                     onClick={() => {
                       lastFilterKeyRef.current = 'category';
                       setFilters({ ...filters, category: '' });
+                    }}
+                    className="ml-1 hover:text-red-500 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              )}
+              {filters.vendorId && (
+                <span className="inline-flex items-center gap-2 px-4 py-2 bg-surface-light border border-surface-light rounded-lg text-sm">
+                  <svg className="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5V4H2v16h5m10 0v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6m10 0H7" />
+                  </svg>
+                  <span className="text-text-primary font-medium">{selectedVendorName}</span>
+                  <button
+                    onClick={() => {
+                      lastFilterKeyRef.current = 'vendorId';
+                      setFilters({ ...filters, vendorId: '' });
                     }}
                     className="ml-1 hover:text-red-500 transition-colors"
                   >
@@ -685,15 +790,20 @@ const Products = () => {
               </div>
               <h3 className="text-xl font-bold text-text-primary mb-2">No Products Found</h3>
               <p className="text-text-secondary mb-6">
-                {filters.search || filters.category
+                {filters.search || filters.category || filters.vendorId
                   ? 'Try adjusting your filters or search terms'
                   : 'No products available at the moment'}
               </p>
-              {(filters.search || filters.category) && (
+              {(filters.search || filters.category || filters.vendorId) && (
                 <button
                   onClick={() => {
                     lastFilterKeyRef.current = 'clear';
-                    setFilters({ search: '', category: '' });
+                    setFilters((prev) => ({
+                      ...prev,
+                      search: '',
+                      category: '',
+                      vendorId: '',
+                    }));
                   }}
                   className="btn-secondary inline-flex items-center gap-2"
                 >

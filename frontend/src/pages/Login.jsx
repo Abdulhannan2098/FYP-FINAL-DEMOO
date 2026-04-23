@@ -68,13 +68,48 @@ const Login = () => {
         navigate('/dashboard/customer');
       }
     } catch (err) {
+      const errorCode = err.response?.data?.code;
+      const errorData = err.response?.data?.data;
+
       // Check if email is not verified (skip for admin users)
-      if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED' && err.response?.data?.data?.role !== 'admin') {
-        const userEmail = err.response?.data?.data?.email || email;
+      if (errorCode === 'EMAIL_NOT_VERIFIED' && errorData?.role !== 'admin') {
+        const userEmail = errorData?.email || email;
+        const isVendor = errorData?.isVendor || errorData?.role === 'vendor';
         showToast('Please verify your email to continue', 'warning');
-        navigate('/verify-email', { state: { email: userEmail } });
+
+        // Store vendor flag in session for the verification flow
+        if (isVendor) {
+          sessionStorage.setItem('isVendorRegistration', 'true');
+        }
+
+        navigate('/verify-email', {
+          state: {
+            email: userEmail,
+            isVendor
+          }
+        });
         return;
       }
+
+      // Check if phone is not verified (vendors only)
+      if (errorCode === 'PHONE_NOT_VERIFIED') {
+        const userEmail = errorData?.email || email;
+        const userPhone = errorData?.phone;
+        showToast('Please verify your phone number to continue', 'warning');
+
+        // Store vendor flag in session for the verification flow
+        sessionStorage.setItem('isVendorRegistration', 'true');
+
+        navigate('/verify-phone', {
+          state: {
+            email: userEmail,
+            phone: userPhone,
+            isVendor: true
+          }
+        });
+        return;
+      }
+
       const errorMessage = err.response?.data?.message || 'Login failed. Please try again.';
       showToast(errorMessage, 'error');
     } finally {
@@ -246,7 +281,7 @@ const Login = () => {
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={() => doLogin('ali.hammad@autosphere.pk', 'Vendor@123')}
+                  onClick={() => doLogin('abdul.hannan05455@gmail.com', 'Test@1234')}
                   className="w-full btn-secondary"
                 >
                   Login as Vendor

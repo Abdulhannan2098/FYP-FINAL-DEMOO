@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import api from '../services/api';
 
 const VerifyEmail = () => {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ const VerifyEmail = () => {
 
   // Get email from navigation state or session storage
   const email = location.state?.email || sessionStorage.getItem('verificationEmail');
+  const isVendor = location.state?.isVendor || sessionStorage.getItem('isVendorRegistration') === 'true';
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -19,12 +21,15 @@ const VerifyEmail = () => {
   const [resendCooldown, setResendCooldown] = useState(0);
   const inputRefs = useRef([]);
 
-  // Store email in session storage for page refresh
+  // Store email and vendor flag in session storage for page refresh
   useEffect(() => {
     if (location.state?.email) {
       sessionStorage.setItem('verificationEmail', location.state.email);
     }
-  }, [location.state?.email]);
+    if (location.state?.isVendor) {
+      sessionStorage.setItem('isVendorRegistration', 'true');
+    }
+  }, [location.state?.email, location.state?.isVendor]);
 
   // Redirect if no email
   useEffect(() => {
@@ -100,20 +105,45 @@ const VerifyEmail = () => {
     setLoading(true);
 
     try {
-      const user = await verifyEmail(email, otpString);
+      // Use vendor-specific endpoint for vendor registration
+      if (isVendor) {
+        const response = await api.post('/vendor/verify-email', { email, otp: otpString });
 
-      // Clear session storage
-      sessionStorage.removeItem('verificationEmail');
+        if (response.data.success) {
+          const { phone } = response.data.data;
 
-      showToast(`Welcome to AutoSphere, ${user.name}!`, 'success');
+          // Clear email verification storage but keep vendor flag
+          sessionStorage.removeItem('verificationEmail');
 
-      // Redirect based on role
-      if (user.role === 'vendor') {
-        navigate('/dashboard/vendor');
-      } else if (user.role === 'admin') {
-        navigate('/dashboard/admin');
+          showToast('Email verified! Now please verify your phone number.', 'success');
+
+          // Redirect to phone verification
+          navigate('/verify-phone', {
+            state: {
+              email,
+              phone,
+              isVendor: true
+            }
+          });
+        }
       } else {
-        navigate('/dashboard/customer');
+        // Regular customer flow
+        const user = await verifyEmail(email, otpString);
+
+        // Clear session storage
+        sessionStorage.removeItem('verificationEmail');
+        sessionStorage.removeItem('isVendorRegistration');
+
+        showToast(`Welcome to AutoSphere, ${user.name}!`, 'success');
+
+        // Redirect based on role
+        if (user.role === 'vendor') {
+          navigate('/dashboard/vendor');
+        } else if (user.role === 'admin') {
+          navigate('/dashboard/admin');
+        } else {
+          navigate('/dashboard/customer');
+        }
       }
     } catch (err) {
       const errorMessage = err.response?.data?.message || 'Invalid or expired OTP';

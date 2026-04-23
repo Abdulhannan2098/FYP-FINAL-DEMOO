@@ -79,14 +79,131 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     const response = await authService.register(userData);
-    const { user: newUser, token } = response.data;
+    const data = response?.data;
+
+    // Web parity: registration returns requiresVerification and no token
+    if (data?.requiresVerification) {
+      return {
+        requiresVerification: true,
+        email: data.email,
+        role: userData?.role || 'customer',
+        phone: userData?.phone,
+      };
+    }
+
+    // Legacy/compat: if backend ever returns token + user
+    const token = data?.token;
+    const newUser = data?.user;
+    if (token && newUser) {
+      await saveToken(token);
+      await saveUser(newUser);
+      setUser(newUser);
+      setIsAuthenticated(true);
+      return newUser;
+    }
+
+    throw new Error(response?.message || 'Registration failed');
+  };
+
+  const registerVendor = async (vendorData) => {
+    const response = await authService.registerVendor(vendorData);
+    const data = response?.data;
+    const token = response?.token || data?.token;
+    const newUser = response?.user || data?.user;
+
+    if (!token || !newUser) {
+      throw new Error(response?.message || 'Vendor registration failed');
+    }
 
     await saveToken(token);
-    await saveUser(newUser); // saveUser handles stringification internally
+    await saveUser(newUser);
     setUser(newUser);
     setIsAuthenticated(true);
 
     return newUser;
+  };
+
+  const sendVendorPreRegEmailOTP = async (email, name) => {
+    return await authService.sendVendorPreRegEmailOTP({ email, name });
+  };
+
+  const sendVendorPreRegPhoneOTP = async (phone, name) => {
+    return await authService.sendVendorPreRegPhoneOTP({ phone, name });
+  };
+
+  const verifyVendorPreRegEmailOTP = async (email, otp) => {
+    return await authService.verifyVendorPreRegEmailOTP({ email, otp });
+  };
+
+  const verifyVendorPreRegPhoneOTP = async (phone, otp) => {
+    return await authService.verifyVendorPreRegPhoneOTP({ phone, otp });
+  };
+
+  const checkVendorPreRegVerification = async (email, phone) => {
+    return await authService.checkVendorPreRegVerification({ email, phone });
+  };
+
+  const verifyEmail = async (email, otp, options = {}) => {
+    const { isVendor = false } = options;
+    const response = isVendor
+      ? await authService.verifyVendorEmail({ email, otp })
+      : await authService.verifyEmail({ email, otp });
+    const data = response?.data;
+    const token = data?.token;
+    const verifiedUser = data?.user;
+
+    if (isVendor && data?.nextStep === 'VERIFY_PHONE') {
+      return {
+        requiresPhoneVerification: true,
+        email: data.email || verifiedUser?.email || email,
+        phone: data.phone || verifiedUser?.phone,
+        user: verifiedUser,
+      };
+    }
+
+    if (!token || !verifiedUser) {
+      throw new Error(response?.message || 'Email verification failed');
+    }
+
+    if (verifiedUser.role === 'vendor' && !verifiedUser.phoneVerified) {
+      return {
+        requiresPhoneVerification: true,
+        email: verifiedUser.email,
+        phone: verifiedUser.phone,
+        user: verifiedUser,
+      };
+    }
+
+    await saveToken(token);
+    await saveUser(verifiedUser);
+    setUser(verifiedUser);
+    setIsAuthenticated(true);
+    return verifiedUser;
+  };
+
+  const verifyPhone = async (email, otp) => {
+    const response = await authService.verifyPhone({ email, otp });
+    const data = response?.data;
+    const token = data?.token;
+    const verifiedUser = data?.user;
+
+    if (!token || !verifiedUser) {
+      throw new Error(response?.message || 'Phone verification failed');
+    }
+
+    await saveToken(token);
+    await saveUser(verifiedUser);
+    setUser(verifiedUser);
+    setIsAuthenticated(true);
+    return verifiedUser;
+  };
+
+  const resendVerificationOTP = async (email) => {
+    return await authService.resendVerificationOTP(email);
+  };
+
+  const resendPhoneOTP = async (email) => {
+    return await authService.resendPhoneOTP(email);
   };
 
   const logout = async () => {
@@ -136,6 +253,16 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     login,
     register,
+    registerVendor,
+    verifyEmail,
+    verifyPhone,
+    resendVerificationOTP,
+    resendPhoneOTP,
+    sendVendorPreRegEmailOTP,
+    sendVendorPreRegPhoneOTP,
+    verifyVendorPreRegEmailOTP,
+    verifyVendorPreRegPhoneOTP,
+    checkVendorPreRegVerification,
     logout,
     updateUser,
     refreshUser,

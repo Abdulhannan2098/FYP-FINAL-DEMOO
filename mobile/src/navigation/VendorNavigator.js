@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useChat } from '../context/ChatContext';
+import { useAuth } from '../context/AuthContext';
 import theme from '../styles/theme';
 
 import DashboardScreen from '../screens/vendor/DashboardScreen';
@@ -13,7 +14,9 @@ import VendorChatScreen from '../screens/vendor/VendorChatScreen';
 import VendorProfileScreen from '../screens/vendor/VendorProfileScreen';
 import EditVendorProfileScreen from '../screens/vendor/EditVendorProfileScreen';
 import VendorSettingsScreen from '../screens/vendor/VendorSettingsScreen';
+import VendorPricingScreen from '../screens/vendor/VendorPricingScreen';
 import ChangePasswordScreen from '../screens/auth/ChangePasswordScreen';
+import VendorVerificationScreen from '../screens/vendor/VendorVerificationScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -44,11 +47,19 @@ const ProfileStack = () => (
     <Stack.Screen name="Dashboard" component={DashboardScreen} />
     <Stack.Screen name="EditVendorProfile" component={EditVendorProfileScreen} />
     <Stack.Screen name="VendorSettings" component={VendorSettingsScreen} />
+    <Stack.Screen name="VendorPricing" component={VendorPricingScreen} />
     <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
   </Stack.Navigator>
 );
 
-const VendorNavigator = () => {
+const UnverifiedVendorStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="VendorVerification" component={VendorVerificationScreen} />
+    <Stack.Screen name="VendorPricing" component={VendorPricingScreen} />
+  </Stack.Navigator>
+);
+
+const VerifiedVendorTabs = () => {
   const { unreadCount } = useChat();
 
   return (
@@ -126,6 +137,16 @@ const VendorNavigator = () => {
       />
     </Tab.Navigator>
   );
+};
+
+const VendorNavigator = () => {
+  const { user } = useAuth();
+
+  if (user?.vendorStatus !== 'verified') {
+    return <UnverifiedVendorStack />;
+  }
+
+  return <VerifiedVendorTabs />;
 };
 
 export default VendorNavigator;

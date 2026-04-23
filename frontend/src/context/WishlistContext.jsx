@@ -19,6 +19,26 @@ export const WishlistProvider = ({ children }) => {
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const getProductId = (item) => {
+    if (!item) return null;
+    if (typeof item.product === 'string') return item.product;
+    return item.product?._id || null;
+  };
+
+  const hasRenderableProduct = (item) => {
+    return Boolean(item?.product && typeof item.product === 'object' && item.product._id);
+  };
+
+  const extractWishlistProducts = (response) => {
+    const data = response?.data?.data;
+    const rawProducts = data?.wishlist?.products || data?.products || [];
+
+    if (!Array.isArray(rawProducts)) return [];
+
+    // Keep only entries with populated product documents to avoid broken card rendering.
+    return rawProducts.filter(hasRenderableProduct);
+  };
+
   // Fetch wishlist when user logs in
   useEffect(() => {
     if (user) {
@@ -32,7 +52,7 @@ export const WishlistProvider = ({ children }) => {
     try {
       setLoading(true);
       const response = await api.get('/wishlist');
-      setWishlist(response.data.data.wishlist.products || []);
+      setWishlist(extractWishlistProducts(response));
     } catch (error) {
       console.error('Failed to fetch wishlist:', error);
     } finally {
@@ -48,7 +68,14 @@ export const WishlistProvider = ({ children }) => {
 
     try {
       const response = await api.post(`/wishlist/${productId}`);
-      setWishlist(response.data.data.products || []);
+      const updatedWishlist = extractWishlistProducts(response);
+
+      if (updatedWishlist.length > 0) {
+        setWishlist(updatedWishlist);
+      } else {
+        await fetchWishlist();
+      }
+
       showToast('Added to wishlist', 'success');
       return true;
     } catch (error) {
@@ -58,12 +85,42 @@ export const WishlistProvider = ({ children }) => {
   };
 
   const removeFromWishlist = async (productId) => {
+    let removedItem = null;
+    let removedIndex = -1;
+
     try {
-      const response = await api.delete(`/wishlist/${productId}`);
-      setWishlist(response.data.data.products || []);
+      setWishlist((prevWishlist) => {
+        removedIndex = prevWishlist.findIndex((item) => getProductId(item) === productId);
+
+        if (removedIndex === -1) {
+          return prevWishlist;
+        }
+
+        removedItem = prevWishlist[removedIndex];
+        const updatedWishlist = prevWishlist.filter((_, index) => index !== removedIndex);
+        console.log('Updated Wishlist:', updatedWishlist);
+        return updatedWishlist;
+      });
+
+      await api.delete(`/wishlist/${productId}`);
+
       showToast('Removed from wishlist', 'success');
       return true;
     } catch (error) {
+      if (removedItem) {
+        setWishlist((prevWishlist) => {
+          const alreadyRestored = prevWishlist.some((item) => getProductId(item) === productId);
+          if (alreadyRestored) {
+            return prevWishlist;
+          }
+
+          const restoredWishlist = [...prevWishlist];
+          const insertAt = Math.min(Math.max(removedIndex, 0), restoredWishlist.length);
+          restoredWishlist.splice(insertAt, 0, removedItem);
+          return restoredWishlist;
+        });
+      }
+
       showToast(error.response?.data?.message || 'Failed to remove from wishlist', 'error');
       return false;
     }
@@ -82,7 +139,7 @@ export const WishlistProvider = ({ children }) => {
   };
 
   const isInWishlist = (productId) => {
-    return wishlist.some(item => item.product?._id === productId || item.product === productId);
+    return wishlist.some((item) => getProductId(item) === productId);
   };
 
   const toggleWishlist = async (productId) => {

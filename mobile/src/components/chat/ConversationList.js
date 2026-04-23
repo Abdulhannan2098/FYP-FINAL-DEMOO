@@ -137,7 +137,10 @@ const ConversationList = ({
       data={conversations}
       renderItem={renderConversation}
       keyExtractor={(item) => item._id}
-      contentContainerStyle={conversations.length === 0 && styles.emptyList}
+      contentContainerStyle={[
+        conversations.length === 0 && styles.emptyList,
+        styles.listContainer
+      ]}
       ListEmptyComponent={renderEmpty}
       refreshControl={
         <RefreshControl
@@ -281,6 +284,9 @@ const styles = StyleSheet.create({
   },
   emptyList: {
     flexGrow: 1,
+  },
+  listContainer: {
+    paddingBottom: 80,
   },
   emptyContainer: {
     flex: 1,

@@ -65,16 +65,19 @@ export const formatDateTime = (date) => {
  * @returns {string} Formatted status
  */
 export const formatOrderStatus = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
   const statusMap = {
-    'Pending Vendor Action': 'Pending',
-    'Accepted': 'Accepted',
-    'Rejected': 'Rejected',
+    'Pending Vendor Action': 'Pending Vendor Action',
     'In Progress': 'In Progress',
     'Shipped': 'Shipped',
-    'Completed': 'Completed',
+    'Delivered': 'Delivered',
     'Cancelled': 'Cancelled',
+    pending: 'Pending Vendor Action',
+    accepted: 'In Progress',
+    rejected: 'Cancelled',
+    completed: 'Delivered',
   };
-  return statusMap[status] || status;
+  return statusMap[status] || statusMap[normalized] || status;
 };
 
 /**
@@ -83,16 +86,19 @@ export const formatOrderStatus = (status) => {
  * @returns {string} Color code
  */
 export const getStatusColor = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
   const colorMap = {
     'Pending Vendor Action': '#FFA500',
-    'Accepted': '#4CAF50',
-    'Rejected': '#F44336',
     'In Progress': '#2196F3',
     'Shipped': '#9C27B0',
-    'Completed': '#4CAF50',
+    'Delivered': '#4CAF50',
     'Cancelled': '#757575',
+    pending: '#FFA500',
+    accepted: '#2196F3',
+    rejected: '#757575',
+    completed: '#4CAF50',
   };
-  return colorMap[status] || '#757575';
+  return colorMap[status] || colorMap[normalized] || '#757575';
 };
 
 /**
@@ -132,8 +138,18 @@ export const isValidEmail = (email) => {
  * @returns {Object} { isValid: boolean, message: string }
  */
 export const validatePassword = (password) => {
-  if (!password || password.length < 8) {
-    return { isValid: false, message: 'Password must be at least 8 characters' };
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/;
+
+  if (!password) {
+    return { isValid: false, message: 'Password is required' };
+  }
+
+  if (!passwordRegex.test(password)) {
+    return {
+      isValid: false,
+      message:
+        'Password must be at least 8 characters and contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+    };
   }
   return { isValid: true, message: 'Password is valid' };
 };

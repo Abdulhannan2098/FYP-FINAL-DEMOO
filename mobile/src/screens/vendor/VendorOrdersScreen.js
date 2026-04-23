@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: 80,
     paddingHorizontal: theme.spacing.lg,
   },
   modalContainer: {

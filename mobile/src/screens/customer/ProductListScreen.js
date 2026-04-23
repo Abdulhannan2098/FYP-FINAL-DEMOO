@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -53,14 +53,19 @@ const ProductListScreen = ({ navigation }) => {
   const [filters, setFilters] = useState({
     search: '',
     category: '',
+    vendorId: '',
     minPrice: '',
     maxPrice: '',
     minRating: '',
     sortBy: '',
     inStock: false,
   });
+  const [vendors, setVendors] = useState([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showVendorModal, setShowVendorModal] = useState(false);
+  const [vendorSearch, setVendorSearch] = useState('');
 
   const GRID_PADDING = theme.spacing.lg;
   const GRID_GAP = theme.spacing.lg;
@@ -74,6 +79,16 @@ const ProductListScreen = ({ navigation }) => {
     }
     return null;
   };
+
+  const selectedVendor = useMemo(() => {
+    return vendors.find((vendor) => String(vendor.id || vendor._id) === String(filters.vendorId)) || null;
+  }, [filters.vendorId, vendors]);
+
+  const filteredVendors = useMemo(() => {
+    const query = vendorSearch.trim().toLowerCase();
+    if (!query) return vendors;
+    return vendors.filter((vendor) => String(vendor.name || '').toLowerCase().includes(query));
+  }, [vendorSearch, vendors]);
 
   const GridProductCard = ({ product, onPress }) => {
     const imageUrl = getProductImageUrl(product);
@@ -140,6 +155,7 @@ const ProductListScreen = ({ navigation }) => {
 
       if (filters.search) params.append('search', filters.search);
       if (filters.category) params.append('category', filters.category);
+      if (filters.vendorId) params.append('vendorId', filters.vendorId);
       if (filters.minPrice) params.append('minPrice', filters.minPrice);
       if (filters.maxPrice) params.append('maxPrice', filters.maxPrice);
       if (filters.minRating) params.append('minRating', filters.minRating);
@@ -203,6 +219,32 @@ const ProductListScreen = ({ navigation }) => {
     if (refreshing && !loading) setRefreshing(false);
   }, [loading, refreshing]);
 
+  // Fetch vendors for vendor filter
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchVendors = async () => {
+      try {
+        setVendorsLoading(true);
+        const response = await apiClient.get('/vendors');
+        if (!isMounted) return;
+        setVendors(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        if (!isMounted) return;
+        setVendors([]);
+        console.error('Failed to load vendor options:', err);
+      } finally {
+        if (isMounted) setVendorsLoading(false);
+      }
+    };
+
+    fetchVendors();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleFilterChange = (newFilters) => {
     setFilters(prev => ({ ...prev, ...newFilters }));
     setPagination(prev => ({ ...prev, currentPage: 1 }));
@@ -222,12 +264,14 @@ const ProductListScreen = ({ navigation }) => {
     setFilters({
       search: '',
       category: '',
+      vendorId: '',
       minPrice: '',
       maxPrice: '',
       minRating: '',
       sortBy: '',
       inStock: false,
     });
+    setVendorSearch('');
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setShowFiltersModal(false);
   };
@@ -284,6 +328,7 @@ const ProductListScreen = ({ navigation }) => {
 
   const activeFiltersCount = [
     filters.category,
+    filters.vendorId,
     filters.minPrice,
     filters.maxPrice,
     filters.minRating,
@@ -422,6 +467,112 @@ const ProductListScreen = ({ navigation }) => {
         </ScrollView>
       </BottomSheet>
 
+      <BottomSheet
+        visible={showVendorModal}
+        onClose={() => {
+          setShowVendorModal(false);
+          setVendorSearch('');
+        }}
+        height={620}
+      >
+        <View style={styles.sheetHeader}>
+          <Text style={styles.modalTitle}>Select Vendor</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setShowVendorModal(false);
+              setVendorSearch('');
+            }}
+          >
+            <Ionicons name="close" size={22} color={theme.colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.vendorSearchWrap}>
+          <View style={styles.vendorSearchInputWrap}>
+            <Ionicons name="search" size={18} color={theme.colors.text.tertiary} />
+            <TextInput
+              value={vendorSearch}
+              onChangeText={setVendorSearch}
+              placeholder="Search vendors"
+              placeholderTextColor={theme.colors.text.tertiary}
+              style={styles.vendorSearchInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {vendorSearch ? (
+              <TouchableOpacity onPress={() => setVendorSearch('')}>
+                <Ionicons name="close-circle" size={18} color={theme.colors.text.tertiary} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
+        <ScrollView style={styles.vendorSheetList} showsVerticalScrollIndicator={false}>
+          <TouchableOpacity
+            style={[
+              styles.vendorSheetItem,
+              !filters.vendorId && styles.vendorSheetItemActive,
+            ]}
+            onPress={() => {
+              handleFilterChange({ vendorId: '' });
+              setShowVendorModal(false);
+              setVendorSearch('');
+            }}
+          >
+            <View>
+              <Text style={[styles.vendorSheetName, !filters.vendorId && styles.vendorSheetNameActive]}>
+                All Vendors
+              </Text>
+              <Text style={styles.vendorSheetMeta}>Show products from every vendor</Text>
+            </View>
+            {!filters.vendorId && (
+              <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary[500]} />
+            )}
+          </TouchableOpacity>
+
+          {vendorsLoading ? (
+            <View style={styles.vendorLoadingRow}>
+              <ActivityIndicator size="small" color={theme.colors.primary[500]} />
+              <Text style={styles.vendorLoadingText}>Loading vendors...</Text>
+            </View>
+          ) : filteredVendors.length === 0 ? (
+            <View style={styles.vendorEmptyState}>
+              <Ionicons name="storefront-outline" size={22} color={theme.colors.text.tertiary} />
+              <Text style={styles.vendorEmptyText}>No vendors found</Text>
+            </View>
+          ) : (
+            filteredVendors.map((vendor) => {
+              const vendorId = String(vendor.id || vendor._id);
+              const isSelected = String(filters.vendorId) === vendorId;
+
+              return (
+                <TouchableOpacity
+                  key={vendorId}
+                  style={[styles.vendorSheetItem, isSelected && styles.vendorSheetItemActive]}
+                  onPress={() => {
+                    handleFilterChange({ vendorId });
+                    setShowVendorModal(false);
+                    setVendorSearch('');
+                  }}
+                >
+                  <View style={styles.vendorSheetTextWrap}>
+                    <Text style={[styles.vendorSheetName, isSelected && styles.vendorSheetNameActive]} numberOfLines={1}>
+                      {vendor.name}
+                    </Text>
+                    <Text style={styles.vendorSheetMeta} numberOfLines={1}>
+                      Tap to filter products by this vendor
+                    </Text>
+                  </View>
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary[500]} />
+                  )}
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      </BottomSheet>
+
       {/* Filters Bottom Sheet */}
       <BottomSheet
         visible={showFiltersModal}
@@ -436,6 +587,39 @@ const ProductListScreen = ({ navigation }) => {
         </View>
 
         <ScrollView style={styles.filtersScroll} showsVerticalScrollIndicator={false}>
+          {/* Vendor */}
+          <View style={styles.filterSection}>
+            <Text style={styles.filterLabel}>Vendor</Text>
+            <TouchableOpacity
+              style={styles.dropdownTrigger}
+              onPress={() => setShowVendorModal(true)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.dropdownTriggerContent}>
+                <Ionicons name="storefront-outline" size={18} color={theme.colors.primary[500]} />
+                <View style={styles.dropdownTriggerTextWrap}>
+                  <Text style={styles.dropdownTriggerLabel} numberOfLines={1}>
+                    {selectedVendor?.name || 'All Vendors'}
+                  </Text>
+                  <Text style={styles.dropdownTriggerMeta} numberOfLines={1}>
+                    {selectedVendor ? 'Selected vendor' : 'Tap to choose a vendor'}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-down" size={18} color={theme.colors.text.tertiary} />
+            </TouchableOpacity>
+            {filters.vendorId ? (
+              <TouchableOpacity
+                style={styles.dropdownClearButton}
+                onPress={() => handleFilterChange({ vendorId: '' })}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="close-circle" size={16} color={theme.colors.primary[500]} />
+                <Text style={styles.dropdownClearText}>Clear vendor</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
           {/* Price Range */}
           <View style={styles.filterSection}>
             <Text style={styles.filterLabel}>Price Range</Text>
@@ -822,6 +1006,129 @@ const styles = StyleSheet.create({
     fontWeight: theme.typography.fontWeight.semibold,
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.md,
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.secondary[700],
+    borderRadius: theme.borderRadius.lg,
+  },
+  dropdownTriggerContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    minWidth: 0,
+  },
+  dropdownTriggerTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  dropdownTriggerLabel: {
+    fontSize: theme.typography.fontSize.base,
+    color: theme.colors.text.primary,
+    fontWeight: theme.typography.fontWeight.semibold,
+  },
+  dropdownTriggerMeta: {
+    marginTop: 2,
+    fontSize: theme.typography.fontSize.xs,
+    color: theme.colors.text.tertiary,
+  },
+  dropdownClearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: theme.spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  dropdownClearText: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.primary[500],
+    fontWeight: theme.typography.fontWeight.semibold,
+  },
+  vendorSearchWrap: {
+    paddingBottom: theme.spacing.md,
+  },
+  vendorSearchInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.secondary[800],
+    borderWidth: 1,
+    borderColor: theme.colors.secondary[700],
+    borderRadius: theme.borderRadius.lg,
+  },
+  vendorSearchInput: {
+    flex: 1,
+    color: theme.colors.text.primary,
+    fontSize: theme.typography.fontSize.base,
+    paddingVertical: 0,
+  },
+  vendorSheetList: {
+    flex: 1,
+  },
+  vendorSheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.secondary[700],
+    marginBottom: theme.spacing.sm,
+  },
+  vendorSheetItemActive: {
+    borderColor: theme.colors.primary[500],
+    backgroundColor: 'rgba(185, 28, 28, 0.1)',
+  },
+  vendorSheetTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  vendorSheetName: {
+    fontSize: theme.typography.fontSize.base,
+    color: theme.colors.text.primary,
+    fontWeight: theme.typography.fontWeight.semibold,
+  },
+  vendorSheetNameActive: {
+    color: theme.colors.primary[500],
+  },
+  vendorSheetMeta: {
+    marginTop: 2,
+    fontSize: theme.typography.fontSize.xs,
+    color: theme.colors.text.tertiary,
+  },
+  vendorLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  vendorLoadingText: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.text.secondary,
+  },
+  vendorEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.xl,
+  },
+  vendorEmptyText: {
+    marginTop: theme.spacing.sm,
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.text.secondary,
+    fontWeight: theme.typography.fontWeight.medium,
   },
   priceInputs: {
     flexDirection: 'row',

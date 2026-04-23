@@ -1,20 +1,17 @@
 /**
- * AR Module - Main Entry Point for Mobile
- *
- * Accurate AR Preview System for Car Accessories (React Native)
+ * AR Module - Simple AR Preview for Mobile
  *
  * Features:
- * - WebView-based 3D model viewing
+ * - 3D model viewing via model-viewer in WebView
+ * - Color customization with PBR materials
  * - Native AR via Scene Viewer (Android) / Quick Look (iOS)
- * - Color customization
- * - Part estimation for future camera-based detection
  */
 
-// Components
+// Main AR Viewer Screen
 export { default as ARViewerScreen } from './components/ARViewerScreen.js';
 
-// Core modules
-export { PartEstimator, getPartEstimator, getProductType } from './core/index.js';
+// Color options for customization
+export { AUTOMOTIVE_COLORS } from './core/constants.js';
 
-// Constants
-export { AUTOMOTIVE_COLORS, UI_MESSAGES, CATEGORY_TO_PRODUCT_TYPE } from './core/constants.js';
+// Product type helper
+export { getProductType } from './core/index.js';

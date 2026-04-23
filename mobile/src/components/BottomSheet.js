@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableWithoutFeedback,
   View,
+  PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import theme from '../styles/theme';
@@ -24,20 +25,20 @@ const BottomSheet = ({
   const panResponder = useMemo(() => {
     let startY = 0;
 
-    return {
-      onStartShouldSetResponder: () => true,
-      onMoveShouldSetResponder: (_, gesture) => Math.abs(gesture.dy) > 4,
-      onResponderGrant: () => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 4,
+      onPanResponderGrant: () => {
         translateY.stopAnimation((value) => {
           startY = value;
         });
       },
-      onResponderMove: (_, gesture) => {
-        const next = Math.max(0, startY + gesture.dy);
+      onPanResponderMove: (_, gestureState) => {
+        const next = Math.max(0, startY + gestureState.dy);
         translateY.setValue(next);
       },
-      onResponderRelease: (_, gesture) => {
-        const shouldClose = gesture.dy > dismissThreshold;
+      onPanResponderRelease: (_, gestureState) => {
+        const shouldClose = gestureState.dy > dismissThreshold;
         if (shouldClose) {
           Animated.timing(translateY, {
             toValue: height,
@@ -56,7 +57,7 @@ const BottomSheet = ({
           stiffness: 220,
         }).start();
       },
-    };
+    });
   }, [dismissThreshold, height, onClose, translateY]);
 
   useEffect(() => {
@@ -88,7 +89,7 @@ const BottomSheet = ({
               transform: [{ translateY }],
             },
           ]}
-          {...panResponder}
+          {...panResponder.panHandlers}
         >
           <View style={styles.handle} />
           {children}

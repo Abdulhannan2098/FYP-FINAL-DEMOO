@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useWishlist } from '../context/WishlistContext';
 import { Link } from 'react-router-dom';
-import { Heart, ShoppingCart, Trash2, ArrowLeft } from 'lucide-react';
+import { Heart, ShoppingCart, Trash2, ArrowLeft, Loader2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import { getPlaceholderImage } from '../utils/constants';
@@ -12,6 +13,11 @@ const Wishlist = () => {
   const { wishlist, loading, removeFromWishlist, clearWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { showToast } = useToast();
+  const [removingIds, setRemovingIds] = useState(new Set());
+
+  const renderableWishlist = wishlist.filter(
+    (item) => item?.product && typeof item.product === 'object' && item.product._id
+  );
 
   const handleAddToCart = (product) => {
     addToCart(product, 1);
@@ -19,7 +25,21 @@ const Wishlist = () => {
   };
 
   const handleRemove = async (productId) => {
+    if (removingIds.has(productId)) return;
+
+    setRemovingIds((prevIds) => {
+      const nextIds = new Set(prevIds);
+      nextIds.add(productId);
+      return nextIds;
+    });
+
     await removeFromWishlist(productId);
+
+    setRemovingIds((prevIds) => {
+      const nextIds = new Set(prevIds);
+      nextIds.delete(productId);
+      return nextIds;
+    });
   };
 
   const handleClearAll = async () => {
@@ -47,10 +67,10 @@ const Wishlist = () => {
             My Wishlist
           </h1>
           <p className="text-text-tertiary">
-            {wishlist.length === 0 ? 'No items' : `${wishlist.length} ${wishlist.length === 1 ? 'item' : 'items'}`} in your wishlist
+            {renderableWishlist.length === 0 ? 'No items' : `${renderableWishlist.length} ${renderableWishlist.length === 1 ? 'item' : 'items'}`} in your wishlist
           </p>
         </div>
-        {wishlist.length > 0 && (
+        {renderableWishlist.length > 0 && (
           <button
             onClick={handleClearAll}
             className="btn btn-outline-error flex items-center gap-2"
@@ -62,7 +82,7 @@ const Wishlist = () => {
       </div>
 
       {/* Empty State */}
-      {wishlist.length === 0 ? (
+      {renderableWishlist.length === 0 ? (
         <div className="text-center py-16">
           <Heart className="w-24 h-24 mx-auto text-gray-300 mb-6" />
           <h2 className="text-2xl font-bold text-text-primary mb-3">Your wishlist is empty</h2>
@@ -77,20 +97,27 @@ const Wishlist = () => {
       ) : (
         /* Wishlist Items */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {wishlist.map((item) => {
+          {renderableWishlist.map((item) => {
             const product = item.product;
             const rawImage = product?.images?.[0];
             const productImage = rawImage ? resolveImageUrl(rawImage) : getPlaceholderImage(product?.category);
+            const isRemoving = removingIds.has(product._id);
 
             return (
-              <div key={item._id} className="card-hover group relative">
+              <div key={product._id} className="card-hover group relative">
                 {/* Remove Button */}
                 <button
                   onClick={() => handleRemove(product._id)}
-                  className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-red-50 transition-all duration-200 shadow-medium hover:scale-110"
+                  disabled={isRemoving}
+                  className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-red-50 transition-all duration-200 shadow-medium hover:scale-110 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
                   aria-label="Remove from wishlist"
+                  title={isRemoving ? 'Removing...' : 'Remove from wishlist'}
                 >
-                  <Trash2 className="w-4 h-4 text-red-500" />
+                  {isRemoving ? (
+                    <Loader2 className="w-4 h-4 text-red-500 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  )}
                 </button>
 
                 <Link to={`/product/${product._id}`}>
@@ -123,7 +150,7 @@ const Wishlist = () => {
                     {/* Rating */}
                     <div className="flex items-center gap-1">
                       <StarRating
-                        rating={product.rating || 0}
+                        rating={product.averageRating || product.rating || 0}
                         size="sm"
                         showCount
                         reviewCount={product.numReviews || 0}

@@ -15,7 +15,7 @@ const generalLimiter = rateLimit({
 // Strict limiter for authentication routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 login/register requests per windowMs
+  max: 100, // Increased for testing (was 5)
   skipSuccessfulRequests: true, // Don't count successful requests
   message: {
     success: false,

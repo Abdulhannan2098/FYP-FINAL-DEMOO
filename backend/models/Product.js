@@ -69,6 +69,26 @@ const productSchema = new mongoose.Schema(
     approvedAt: {
       type: Date,
     },
+    // ==================== AI REVIEW FIELDS ====================
+    aiReviewed: {
+      type: Boolean,
+      default: false,
+    },
+    aiDecision: {
+      type: String,
+      enum: ['auto_approved', 'pending_review', 'auto_rejected', null],
+      default: null,
+    },
+    aiConfidenceScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    aiReason: {
+      type: String,
+      default: '',
+    },
     rating: {
       type: Number,
       default: 0,

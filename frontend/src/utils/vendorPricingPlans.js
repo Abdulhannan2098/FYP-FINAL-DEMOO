@@ -1,7 +1,7 @@
 export const VENDOR_PRICING_PLANS = [
   {
     id: 'freemium',
-    name: 'Freemium',
+    name: 'Basic',
     monthlyPrice: 0,
     priceLabel: 'Free',
     cadence: '',

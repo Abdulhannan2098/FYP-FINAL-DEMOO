@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -21,13 +21,12 @@ import theme from '../../styles/theme';
 const RegisterScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { register } = useAuth();
-  const requestedRole = route?.params?.role;
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: requestedRole === 'vendor' ? 'vendor' : 'customer',
+    role: 'customer',
     phone: '',
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -35,11 +34,16 @@ const RegisterScreen = ({ navigation, route }) => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (requestedRole === 'vendor' || requestedRole === 'customer') {
-      setFormData((prev) => ({ ...prev, role: requestedRole }));
-    }
-  }, [requestedRole]);
+  const handleVendorOnboardingEntry = () => {
+    navigation.navigate('VendorRegister', {
+      prefill: {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        password: formData.password,
+      },
+    });
+  };
 
   const updateField = (field, value) => {
     setFormData({ ...formData, [field]: value });
@@ -52,19 +56,29 @@ const RegisterScreen = ({ navigation, route }) => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.name) {
+    if (!formData.name?.trim()) {
       newErrors.name = 'Name is required';
     }
 
-    if (!formData.email) {
+    if (!formData.email?.trim()) {
       newErrors.email = 'Email is required';
     } else if (!isValidEmail(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
 
+    if (!formData.phone?.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!/^(\+923|03)\d{9}$/.test(formData.phone.trim())) {
+      newErrors.phone = 'Phone must be in format 03001234567 or +923001234567';
+    }
+
     const passwordValidation = validatePassword(formData.password);
     if (!passwordValidation.isValid) {
       newErrors.password = passwordValidation.message;
+    }
+
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
     }
 
     if (formData.password !== formData.confirmPassword) {
@@ -78,21 +92,58 @@ const RegisterScreen = ({ navigation, route }) => {
   const handleRegister = async () => {
     if (!validateForm()) return;
 
+    if (formData.role === 'vendor') {
+      handleVendorOnboardingEntry();
+      return;
+    }
+
     setLoading(true);
     try {
       const userData = {
-        name: formData.name,
-        email: formData.email,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
         password: formData.password,
         role: formData.role,
-        phone: formData.phone,
+        phone: formData.phone.trim(),
       };
 
-      await register(userData);
-      // Navigation is handled automatically by RootNavigator based on user state
+      const result = await register(userData);
+
+      // Web parity: new backend requires email verification
+      if (result?.requiresVerification && result?.email) {
+        navigation.navigate('VerifyEmail', {
+          email: result.email,
+          role: result.role,
+          phone: result.phone,
+          isVendor: result.role === 'vendor',
+        });
+        return;
+      }
+
+      // Otherwise (legacy), RootNavigator will switch based on auth state
       console.log('Registration successful');
     } catch (error) {
-      Alert.alert('Registration Failed', error.message || 'Could not create account');
+      const backendErrors = Array.isArray(error?.errors) ? error.errors : null;
+      if (backendErrors?.length) {
+        const nextErrors = {};
+        backendErrors.forEach((item) => {
+          if (item?.path) {
+            nextErrors[item.path] = item.msg;
+          }
+        });
+
+        if (Object.keys(nextErrors).length > 0) {
+          setErrors((prev) => ({ ...prev, ...nextErrors }));
+          return;
+        }
+      }
+
+      const message = error?.message || 'Could not create account';
+      if (/already exists|already registered/i.test(message)) {
+        setErrors((prev) => ({ ...prev, email: message }));
+      }
+
+      Alert.alert('Registration Failed', message);
     } finally {
       setLoading(false);
     }
@@ -146,7 +197,11 @@ const RegisterScreen = ({ navigation, route }) => {
           <View style={styles.content}>
             <View style={styles.card}>
               <Text style={styles.cardTitle}>AutoSphere</Text>
-              <Text style={styles.cardSubtitle}>Create your account in seconds</Text>
+                  <Text style={styles.cardSubtitle}>
+                    {formData.role === 'vendor'
+                      ? 'Continue into the vendor onboarding flow'
+                      : 'Create your account in seconds'}
+                  </Text>
 
               <View style={styles.roleContainer}>
                 <Text style={styles.label}>Account type</Text>
@@ -179,7 +234,7 @@ const RegisterScreen = ({ navigation, route }) => {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.roleButton, formData.role === 'vendor' && styles.roleButtonActive]}
-                    onPress={() => updateField('role', 'vendor')}
+                    onPress={handleVendorOnboardingEntry}
                     activeOpacity={0.85}
                   >
                     <Ionicons
@@ -270,16 +325,17 @@ const RegisterScreen = ({ navigation, route }) => {
               />
 
               <Input
-                label="Phone (Optional)"
+                label="Phone Number"
                 value={formData.phone}
                 onChangeText={(value) => updateField('phone', value)}
                 placeholder="Enter your phone number"
                 keyboardType="phone-pad"
+                error={errors.phone}
                 style={styles.inputSpacing}
               />
 
               <Button
-                title="Create account"
+                title={formData.role === 'vendor' ? 'Continue vendor onboarding' : 'Create account'}
                 onPress={handleRegister}
                 loading={loading}
                 style={styles.primaryButton}

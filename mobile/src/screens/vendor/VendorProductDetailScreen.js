@@ -263,10 +263,25 @@ const VendorProductDetailScreen = ({ route, navigation }) => {
             ) : null}
           </View>
 
-          {product?.approvalStatus === 'Rejected' && product?.rejectionReason ? (
+          {approvalMeta.tone === 'rejected' ? (
             <View style={styles.rejectionBox}>
-              <Text style={styles.rejectionTitle}>Rejection reason</Text>
-              <Text style={styles.rejectionText}>{product.rejectionReason}</Text>
+              <View style={styles.statusBoxHeader}>
+                <Ionicons name="close-circle-outline" size={16} color="#fca5a5" />
+                <Text style={styles.rejectionTitle}>Not Approved</Text>
+              </View>
+              <Text style={styles.rejectionText}>
+                Your product was not approved because it does not belong to the car modification and customisation category, which is against our platform policy.
+              </Text>
+            </View>
+          ) : approvalMeta.tone === 'pending' ? (
+            <View style={styles.pendingBox}>
+              <View style={styles.statusBoxHeader}>
+                <Ionicons name="time-outline" size={16} color="#fde68a" />
+                <Text style={styles.pendingTitle}>Under Review</Text>
+              </View>
+              <Text style={styles.pendingText}>
+                Your product is under review. Our team will verify whether it fits within our car modification category.
+              </Text>
             </View>
           ) : null}
         </View>
@@ -578,6 +593,12 @@ const styles = StyleSheet.create({
   stockPillTextOut: {
     color: '#fca5a5',
   },
+  statusBoxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
   rejectionBox: {
     marginTop: theme.spacing.lg,
     padding: theme.spacing.md,
@@ -590,9 +611,26 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     fontWeight: theme.typography.fontWeight.bold,
     color: '#fecaca',
-    marginBottom: 6,
   },
   rejectionText: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.text.primary,
+    lineHeight: 20,
+  },
+  pendingBox: {
+    marginTop: theme.spacing.lg,
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.45)',
+    backgroundColor: 'rgba(245, 158, 11, 0.10)',
+  },
+  pendingTitle: {
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: '#fde68a',
+  },
+  pendingText: {
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.text.primary,
     lineHeight: 20,

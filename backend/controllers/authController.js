@@ -72,6 +72,28 @@ const normalizeEmail = (value) => {
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const TEST_VENDOR_BYPASS_EMAIL = 'abdulhannan05455@gmail.com';
+
+const isVendorBypassEmail = (email) => normalizeEmail(email) === TEST_VENDOR_BYPASS_EMAIL;
+
+const getEffectiveVendorVerification = (user) => {
+  const isBypassVendor = user?.role === 'vendor' && isVendorBypassEmail(user?.email);
+
+  if (isBypassVendor) {
+    return {
+      vendorStatus: 'verified',
+      emailVerified: true,
+      phoneVerified: true,
+    };
+  }
+
+  return {
+    vendorStatus: user?.vendorStatus,
+    emailVerified: !!user?.emailVerified,
+    phoneVerified: !!user?.phoneVerified,
+  };
+};
+
 const buildLooseEmailMatch = (normalizedEmail) => {
   // Handles accidental leading/trailing spaces + casing differences in stored emails.
   // (Some existing users may have been saved without trimming.)
@@ -90,10 +112,13 @@ const buildAuthUserResponse = (user) => ({
   name: user.name,
   email: user.email,
   role: user.role,
+  emailVerified: !!user.emailVerified,
+  phoneVerified: !!user.phoneVerified,
   phone: user.phone,
   address: user.address,
   profileImage: user.profileImage,
   avatar: user.avatar, // Google OAuth profile picture
+  ...(user.role === 'vendor' ? getEffectiveVendorVerification(user) : {}),
 });
 
 // @desc    Register a new user
@@ -214,6 +239,49 @@ exports.login = async (req, res, next) => {
       });
     }
 
+    // Vendor verification: require both email and phone verification
+    if (user.role === 'vendor' && user.authProvider === 'local') {
+      // Targeted testing bypass for a single vendor account.
+      const headerValue = req.headers?.['x-mobile-test-login'];
+      const isMobileSeedTestLogin =
+        (headerValue === 'true' || headerValue === true || headerValue === '1') &&
+        normalizedEmail === 'ali.hammad@autosphere.pk';
+      const isBypassVendorLogin = isVendorBypassEmail(normalizedEmail) || isMobileSeedTestLogin;
+
+      if (isBypassVendorLogin) {
+        // Skip vendor verification checks for testing
+      } else {
+      if (!user.emailVerified) {
+        return res.status(403).json({
+          success: false,
+          message: 'Please verify your email before logging in',
+          code: 'EMAIL_NOT_VERIFIED',
+          data: {
+            email: user.email,
+            role: user.role,
+            requiresVerification: true,
+            isVendor: true,
+          },
+        });
+      }
+
+      if (!user.phoneVerified) {
+        return res.status(403).json({
+          success: false,
+          message: 'Please verify your phone number before logging in',
+          code: 'PHONE_NOT_VERIFIED',
+          data: {
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            requiresPhoneVerification: true,
+            isVendor: true,
+          },
+        });
+      }
+      }
+    }
+
     const token = generateToken(user._id);
 
     // Extract session information from request
@@ -263,8 +331,14 @@ exports.getMe = async (req, res, next) => {
 
     // Include vendor-specific fields in response
     if (user.role === 'vendor') {
+      const effectiveVendorVerification = getEffectiveVendorVerification(user);
       responseData.businessName = user.businessName;
       responseData.businessAddress = user.businessAddress;
+      responseData.vendorStatus = effectiveVendorVerification.vendorStatus;
+      responseData.phoneVerified = effectiveVendorVerification.phoneVerified;
+      responseData.emailVerified = effectiveVendorVerification.emailVerified;
+      responseData.accessoryCategory = user.accessoryCategory;
+      responseData.cnicNumber = user.cnicNumber || null;
     }
 
     res.status(200).json({
@@ -308,8 +382,11 @@ exports.forgotPassword = async (req, res, next) => {
     const resetToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
 
-    // Create reset URL
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
+    // Create reset URL (match frontend flow: Forgot Password -> Verify OTP -> Reset Password)
+    // We intentionally do NOT include the OTP in the URL.
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-otp?email=${encodeURIComponent(
+      user.email
+    )}`;
 
     // Log OTP to console in development mode
     if (process.env.NODE_ENV === 'development') {
@@ -637,8 +714,8 @@ exports.setup2FA = async (req, res, next) => {
     user.twoFactorSecret = secret.base32;
     await user.save();
 
-    // Send setup email
-    sendTwoFactorSetupEmail(user.email, user.name, qrCodeDataUrl).catch(err =>
+    // Send setup email (include manual setup key for clients that block images)
+    sendTwoFactorSetupEmail(user.email, user.name, qrCodeDataUrl, secret.base32).catch(err =>
       console.error('Failed to send 2FA setup email:', err.message)
     );
 
@@ -876,14 +953,7 @@ exports.updateProfile = async (req, res, next) => {
 
     // Build response data based on user role
     const responseData = {
-      id: user._id,
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      phone: user.phone,
-      address: user.address,
-      profileImage: user.profileImage,
+      ...buildAuthUserResponse(user),
     };
 
     // Include vendor-specific fields in response

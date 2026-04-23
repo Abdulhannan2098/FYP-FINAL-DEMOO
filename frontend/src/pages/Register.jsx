@@ -6,14 +6,21 @@ import { Eye, EyeOff } from 'lucide-react';
 
 const Register = () => {
   const [searchParams] = useSearchParams();
-  const initialRole = searchParams.get('role') === 'vendor' ? 'vendor' : 'customer';
+  const navigate = useNavigate();
+
+  // Redirect vendor registration attempts to the dedicated vendor page
+  useEffect(() => {
+    if (searchParams.get('role') === 'vendor') {
+      navigate('/vendor/register', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: initialRole,
+    role: 'customer', // Always customer on this page
     phone: '',
   });
   const [errors, setErrors] = useState({});
@@ -23,7 +30,6 @@ const Register = () => {
 
   const { register } = useAuth();
   const { showToast } = useToast();
-  const navigate = useNavigate();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -117,12 +123,7 @@ const Register = () => {
 
       // Legacy flow (immediate login - shouldn't happen with new backend)
       showToast(`Welcome to AutoSphere, ${result.name}!`, 'success');
-
-      if (result.role === 'vendor') {
-        navigate('/dashboard/vendor');
-      } else {
-        navigate('/dashboard/customer');
-      }
+      navigate('/dashboard/customer');
     } catch (err) {
       // Map backend errors to specific fields
       if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
@@ -186,42 +187,34 @@ const Register = () => {
                 I want to register as
               </label>
               <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: 'customer' })}
-                  className={`p-5 rounded-xl border-2 transition-all duration-200 ${
-                    formData.role === 'customer'
-                      ? 'border-primary-500 bg-primary-900/20 shadow-neon-red'
-                      : 'border-surface-light hover:border-surface-lighter bg-surface-light'
-                  }`}
+                <div
+                  className="p-5 rounded-xl border-2 transition-all duration-200 border-primary-500 bg-primary-900/20 shadow-neon-red"
                 >
                   <div className="text-center">
-                    <svg className={`w-9 h-9 mx-auto mb-3 ${formData.role === 'customer' ? 'text-primary-500' : 'text-text-tertiary'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-9 h-9 mx-auto mb-3 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                     </svg>
-                    <p className={`font-bold ${formData.role === 'customer' ? 'text-primary-500' : 'text-text-primary'}`}>Customer</p>
+                    <p className="font-bold text-primary-500">Customer</p>
                     <p className="text-xs text-text-tertiary mt-1">Buy products</p>
                   </div>
-                </button>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: 'vendor' })}
-                  className={`p-5 rounded-xl border-2 transition-all duration-200 ${
-                    formData.role === 'vendor'
-                      ? 'border-primary-500 bg-primary-900/20 shadow-neon-red'
-                      : 'border-surface-light hover:border-surface-lighter bg-surface-light'
-                  }`}
+                <Link
+                  to="/vendor/register"
+                  className="p-5 rounded-xl border-2 transition-all duration-200 border-surface-light hover:border-primary-500 hover:bg-primary-900/10 bg-surface-light"
                 >
                   <div className="text-center">
-                    <svg className={`w-9 h-9 mx-auto mb-3 ${formData.role === 'vendor' ? 'text-primary-500' : 'text-text-tertiary'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-9 h-9 mx-auto mb-3 text-text-tertiary group-hover:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
-                    <p className={`font-bold ${formData.role === 'vendor' ? 'text-primary-500' : 'text-text-primary'}`}>Vendor</p>
-                    <p className="text-xs text-text-tertiary mt-1">Sell products</p>
+                    <p className="font-bold text-text-primary">Vendor</p>
+                    <p className="text-xs text-text-tertiary mt-1">Sell products →</p>
                   </div>
-                </button>
+                </Link>
               </div>
+              <p className="text-xs text-text-tertiary mt-3 text-center">
+                Want to sell on AutoSphere? <Link to="/vendor/register" className="text-primary-400 hover:underline">Register as a Vendor Partner</Link>
+              </p>
             </div>
 
             {/* Form Fields */}

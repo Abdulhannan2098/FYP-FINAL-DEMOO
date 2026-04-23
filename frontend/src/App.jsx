@@ -15,6 +15,9 @@ const Register = lazy(() => import('./pages/Register'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const VerifyOTP = lazy(() => import('./pages/VerifyOTP'));
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
+const VerifyPhone = lazy(() => import('./pages/VerifyPhone'));
+const VendorRegister = lazy(() => import('./pages/VendorRegister'));
+const VendorVerification = lazy(() => import('./pages/VendorVerification'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const OAuthCallback = lazy(() => import('./pages/OAuthCallback'));
 const Home = lazy(() => import('./pages/Home'));
@@ -94,6 +97,8 @@ function App() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/verify-otp" element={<VerifyOTP />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route path="/verify-phone" element={<VerifyPhone />} />
+              <Route path="/vendor/register" element={<VendorRegister />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/auth/callback" element={<OAuthCallback />} />
               <Route path="/product/:id" element={<ProductDetail />} />
@@ -171,6 +176,15 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['vendor']}>
                     <VendorSettings />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/vendor/verification"
+                element={
+                  <ProtectedRoute allowedRoles={['vendor']}>
+                    <VendorVerification />
                   </ProtectedRoute>
                 }
               />

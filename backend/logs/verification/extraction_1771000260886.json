@@ -1,0 +1,82 @@
+{
+  "sessionId": "1771000260886",
+  "timestamp": "2026-02-13T16:31:00.886Z",
+  "stages": [
+    {
+      "stage": "init",
+      "timestamp": "2026-02-13T16:31:00.887Z",
+      "imagePath": "uploads\\verification\\69750c8546b348efc92afed4-cnicFront.jpeg"
+    },
+    {
+      "stage": "preprocess",
+      "timestamp": "2026-02-13T16:31:02.530Z",
+      "success": true,
+      "variants": [
+        "normalized_sharp",
+        "high_contrast",
+        "bright_normalized",
+        "very_high_contrast"
+      ]
+    },
+    {
+      "stage": "extraction",
+      "timestamp": "2026-02-13T16:31:27.289Z",
+      "resultsCount": 8,
+      "results": [
+        {
+          "name": "DO IS IN",
+          "confidence": 33,
+          "method": "region",
+          "variant": "normalized_sharp"
+        },
+        {
+          "name": "E SAIFULLAH",
+          "confidence": 24,
+          "method": "full",
+          "variant": "normalized_sharp"
+        },
+        {
+          "name": "SAIF ULLAH",
+          "confidence": 44,
+          "method": "region",
+          "variant": "high_contrast"
+        },
+        {
+          "name": "RAT SAIF ULLAH",
+          "confidence": 60,
+          "method": "full",
+          "variant": "high_contrast"
+        },
+        {
+          "name": "SLANG FEES",
+          "confidence": 29,
+          "method": "region",
+          "variant": "bright_normalized"
+        },
+        {
+          "name": "OE HE BRE",
+          "confidence": 26,
+          "method": "full",
+          "variant": "bright_normalized"
+        },
+        {
+          "name": "SAIF ULLAH",
+          "confidence": 40,
+          "method": "region",
+          "variant": "very_high_contrast"
+        },
+        {
+          "name": "TT SAIF ULLAH",
+          "confidence": 60,
+          "method": "full",
+          "variant": "very_high_contrast"
+        }
+      ]
+    }
+  ],
+  "finalResult": {
+    "success": false,
+    "error": "Confidence too low (60%)",
+    "bestCandidate": "RAT SAIF ULLAH"
+  }
+}

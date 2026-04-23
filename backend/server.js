@@ -21,6 +21,8 @@ const orderRoutes = require('./routes/orders');
 const reviewRoutes = require('./routes/reviews');
 const wishlistRoutes = require('./routes/wishlist');
 const chatRoutes = require('./routes/chat');
+const vendorRoutes = require('./routes/vendor');
+const vendorsRoutes = require('./routes/vendors');
 
 // Initialize Express app
 const app = express();
@@ -60,24 +62,8 @@ app.use(helmet({
 const corsOptions = env.NODE_ENV === 'production'
   ? { origin: env.CORS_ORIGIN, credentials: true }
   : {
-      origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-
-        // Allow localhost and local network IPs
-        const allowedOrigins = [
-          'http://localhost:5173',
-          /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:5173$/,
-          /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}:5173$/,
-          /^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}:5173$/
-        ];
-
-        const isAllowed = allowedOrigins.some(pattern =>
-          pattern instanceof RegExp ? pattern.test(origin) : pattern === origin
-        );
-
-        callback(null, isAllowed);
-      },
+      // In development, allow all origins for easier mobile/Expo testing
+      origin: true,
       credentials: true
     };
 
@@ -121,6 +107,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/vendor', vendorRoutes);
+app.use('/api/vendors', vendorsRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

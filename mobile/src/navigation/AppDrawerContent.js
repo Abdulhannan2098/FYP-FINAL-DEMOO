@@ -97,7 +97,7 @@ const AppDrawerContent = (props) => {
           <DrawerItem
             icon="storefront-outline"
             label="Sell on AutoSphere"
-            onPress={() => navigate({ screen: 'Register', params: { role: 'vendor' } })}
+            onPress={() => navigate({ screen: 'VendorRegister' })}
           />
         </View>
       ) : user?.role === 'vendor' ? (
@@ -105,6 +105,11 @@ const AppDrawerContent = (props) => {
           <DrawerItem icon="speedometer-outline" label="Dashboard" onPress={() => navigateTab('VendorDashboard')} />
           <DrawerItem icon="cube-outline" label="My Products" onPress={() => navigateTab('VendorProducts')} />
           <DrawerItem icon="receipt-outline" label="Orders" onPress={() => navigateTab('VendorOrders')} />
+          <DrawerItem
+            icon="pricetag-outline"
+            label="Pricing Plans"
+            onPress={() => navigateTab('VendorProfile', { screen: 'VendorPricing' })}
+          />
           <DrawerItem icon="chatbubbles-outline" label="Messages" onPress={() => navigateTab('VendorChat')} />
           <DrawerItem icon="person-outline" label="Profile" onPress={() => navigateTab('VendorProfile')} />
 

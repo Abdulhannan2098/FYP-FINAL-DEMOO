@@ -1,15 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -65,8 +55,6 @@ const LoginScreen = ({ navigation }) => {
 
     if (!password) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
     }
 
     setErrors(newErrors);
@@ -82,7 +70,43 @@ const LoginScreen = ({ navigation }) => {
       // Navigation is handled automatically by RootNavigator based on user state
       console.log('Login successful');
     } catch (error) {
-      Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      if (error?.code === 'EMAIL_NOT_VERIFIED' && error?.data?.email) {
+        Alert.alert(
+          'Email not verified',
+          'Please verify your email before logging in.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Verify now',
+              onPress: () =>
+                navigation.navigate('VerifyEmail', {
+                  email: error.data.email,
+                  role: error.data.role,
+                  phone: error.data.phone,
+                  isVendor: error.data.role === 'vendor' || error.data.isVendor,
+                }),
+            },
+          ]
+        );
+      } else if (error?.code === 'PHONE_NOT_VERIFIED' && error?.data?.email) {
+        Alert.alert(
+          'Phone not verified',
+          'Please verify your phone number before logging in.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Verify now',
+              onPress: () =>
+                navigation.navigate('VerifyPhone', {
+                  email: error.data.email,
+                  phone: error.data.phone,
+                }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      }
     } finally {
       setLoading(false);
     }
@@ -187,21 +211,20 @@ const LoginScreen = ({ navigation }) => {
                 style={styles.secondaryButton}
               />
 
+              <Button
+                title="Become a vendor"
+                onPress={() => navigation.navigate('VendorRegister')}
+                variant="outline"
+                style={styles.secondaryButton}
+              />
+
               {__DEV__ && (
                 <View style={styles.quickTestContainer}>
                   <Text style={styles.quickTestTitle}>Quick test login</Text>
                   <View style={styles.quickRow}>
                     <Button
-                      title="Admin"
-                      onPress={() => quickLogin('admin123@autosphere.com', 'Admin@123')}
-                      variant="outline"
-                      size="small"
-                      disabled={loading}
-                      style={styles.quickBtn}
-                    />
-                    <Button
-                      title="Vendor"
-                      onPress={() => quickLogin('ali.hammad@autosphere.pk', 'Vendor@123')}
+                      title="Vendor (Ali Hammad)"
+                      onPress={() => quickLogin('abdul.hannan05455@gmail.com', 'Test@1234')}
                       variant="outline"
                       size="small"
                       disabled={loading}
@@ -209,7 +232,7 @@ const LoginScreen = ({ navigation }) => {
                     />
                     <Button
                       title="Customer"
-                      onPress={() => quickLogin('ayesha.khan@example.pk', 'Customer@123')}
+                      onPress={() => quickLogin('Sheikhhannan5455@gmail.com', 'Test@1234')}
                       variant="outline"
                       size="small"
                       disabled={loading}

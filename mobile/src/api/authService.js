@@ -8,7 +8,7 @@ export const authService = {
   /**
    * Register a new user
    * @param {Object} userData - { name, email, password, role, phone, address }
-   * @returns {Promise} User data and token
+   * @returns {Promise} API response (may require email verification)
    */
   register: async (userData) => {
     const response = await apiClient.post(ENDPOINTS.REGISTER, userData);
@@ -21,7 +21,18 @@ export const authService = {
    * @returns {Promise} User data and token
    */
   login: async (credentials) => {
-    const response = await apiClient.post(ENDPOINTS.LOGIN, credentials);
+    const normalizedEmail = (credentials?.email ?? '').toString().trim().toLowerCase();
+    // Mobile-only testing bypass: opt in via header for the seeded vendor login.
+    // Kept scoped to a single known vendor email to avoid affecting other users.
+    const shouldBypassVendorVerification = normalizedEmail === 'ali.hammad@autosphere.pk';
+
+    const response = await apiClient.post(
+      ENDPOINTS.LOGIN,
+      credentials,
+      shouldBypassVendorVerification
+        ? { headers: { 'X-Mobile-Test-Login': 'true' } }
+        : undefined
+    );
     return response.data;
   },
 
@@ -51,6 +62,116 @@ export const authService = {
    */
   verifyOTP: async (data) => {
     const response = await apiClient.post(ENDPOINTS.VERIFY_OTP, data);
+    return response.data;
+  },
+
+  /**
+   * Verify email with OTP (post-registration)
+   * @param {Object} data - { email, otp }
+   * @returns {Promise}
+   */
+  verifyEmail: async (data) => {
+    const response = await apiClient.post(ENDPOINTS.VERIFY_EMAIL, data);
+    return response.data;
+  },
+
+  /**
+   * Verify vendor email with OTP
+   * @param {Object} data - { email, otp }
+   * @returns {Promise}
+   */
+  verifyVendorEmail: async (data) => {
+    const response = await apiClient.post(ENDPOINTS.VERIFY_VENDOR_EMAIL, data);
+    return response.data;
+  },
+
+  /**
+   * Send vendor pre-registration email OTP
+   * @param {Object} data - { email, name }
+   * @returns {Promise}
+   */
+  sendVendorPreRegEmailOTP: async (data) => {
+    const response = await apiClient.post(ENDPOINTS.VENDOR_PRE_REGISTER_SEND_EMAIL_OTP, data);
+    return response.data;
+  },
+
+  /**
+   * Send vendor pre-registration phone OTP
+   * @param {Object} data - { phone, name }
+   * @returns {Promise}
+   */
+  sendVendorPreRegPhoneOTP: async (data) => {
+    const response = await apiClient.post(ENDPOINTS.VENDOR_PRE_REGISTER_SEND_PHONE_OTP, data);
+    return response.data;
+  },
+
+  /**
+   * Verify vendor pre-registration email OTP
+   * @param {Object} data - { email, otp }
+   * @returns {Promise}
+   */
+  verifyVendorPreRegEmailOTP: async (data) => {
+    const response = await apiClient.post(ENDPOINTS.VENDOR_PRE_REGISTER_VERIFY_EMAIL_OTP, data);
+    return response.data;
+  },
+
+  /**
+   * Verify vendor pre-registration phone OTP
+   * @param {Object} data - { phone, otp }
+   * @returns {Promise}
+   */
+  verifyVendorPreRegPhoneOTP: async (data) => {
+    const response = await apiClient.post(ENDPOINTS.VENDOR_PRE_REGISTER_VERIFY_PHONE_OTP, data);
+    return response.data;
+  },
+
+  /**
+   * Check vendor pre-registration verification state
+   * @param {Object} data - { email, phone }
+   * @returns {Promise}
+   */
+  checkVendorPreRegVerification: async (data) => {
+    const response = await apiClient.post(ENDPOINTS.VENDOR_PRE_REGISTER_CHECK_VERIFICATION, data);
+    return response.data;
+  },
+
+  /**
+   * Verify vendor phone OTP
+   * @param {Object} data - { email, otp }
+   * @returns {Promise}
+   */
+  verifyPhone: async (data) => {
+    const response = await apiClient.post(ENDPOINTS.VERIFY_PHONE, data);
+    return response.data;
+  },
+
+  /**
+   * Resend verification OTP
+   * @param {string} email
+   * @returns {Promise}
+   */
+  resendVerificationOTP: async (email) => {
+    const response = await apiClient.post(ENDPOINTS.RESEND_VERIFICATION_OTP, { email });
+    return response.data;
+  },
+
+  /**
+   * Resend vendor phone OTP
+   * @param {string} email
+   * @returns {Promise}
+   */
+  resendPhoneOTP: async (email) => {
+    const response = await apiClient.post(ENDPOINTS.RESEND_PHONE_OTP, { email });
+    return response.data;
+  },
+
+  /**
+   * Register a new vendor after pre-verification
+   * @param {Object} vendorData
+   * @returns {Promise}
+   */
+  registerVendor: async (vendorData) => {
+    const response = await apiClient.post(ENDPOINTS.VENDOR_REGISTER, vendorData);
     return response.data;
   },
 

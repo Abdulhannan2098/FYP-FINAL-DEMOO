@@ -181,7 +181,7 @@ const SlideMenu = () => {
         <MenuItem
           icon="storefront-outline"
           label="Sell on AutoSphere"
-          onPress={() => navigateTo('Register', { role: 'vendor' })}
+          onPress={() => navigateTo('VendorRegister')}
         />
     </>
   );

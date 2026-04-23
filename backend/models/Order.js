@@ -1,6 +1,23 @@
 const mongoose = require('mongoose');
 const Counter = require('./Counter');
 
+const normalizeOrderStatus = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
+
+  if (normalized === 'accepted') return 'In Progress';
+  if (normalized === 'rejected') return 'Cancelled';
+  if (normalized === 'completed') return 'Delivered';
+  if (normalized === 'pending') return 'Pending Vendor Action';
+
+  if (normalized === 'in progress') return 'In Progress';
+  if (normalized === 'shipped') return 'Shipped';
+  if (normalized === 'delivered') return 'Delivered';
+  if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+  if (normalized === 'pending vendor action') return 'Pending Vendor Action';
+
+  return status;
+};
+
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: {
@@ -53,11 +70,9 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: [
         'Pending Vendor Action',
-        'Accepted',
-        'Rejected',
         'In Progress',
         'Shipped',
-        'Completed',
+        'Delivered',
         'Cancelled',
       ],
       default: 'Pending Vendor Action',
@@ -97,10 +112,29 @@ const orderSchema = new mongoose.Schema(
   {
     timestamps: true,
     collection: 'orders',
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
+orderSchema.virtual('orderId').get(function () {
+  return String(this.orderNumber || this._id);
+});
+
 // Add initial status to history on creation + generate stable unique orderNumber
+orderSchema.pre('validate', function (next) {
+  this.status = normalizeOrderStatus(this.status);
+
+  if (Array.isArray(this.statusHistory) && this.statusHistory.length > 0) {
+    this.statusHistory = this.statusHistory.map((entry) => ({
+      ...entry,
+      status: normalizeOrderStatus(entry.status),
+    }));
+  }
+
+  next();
+});
+
 orderSchema.pre('save', async function (next) {
   try {
     if (!this.orderNumber) {

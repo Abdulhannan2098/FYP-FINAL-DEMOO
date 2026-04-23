@@ -10,17 +10,12 @@ const VendorPricing = () => {
         </p>
       </div>
 
-      <div className="bg-surface border border-surface-light rounded-xl p-6 mb-8 shadow-card">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <p className="text-sm text-text-tertiary">AR Advantage</p>
-            <p className="text-text-secondary">
-              Vendors with AR previews build trust faster and reduce return risk by letting customers see fit and style before buying.
-            </p>
-          </div>
-          <div className="md:text-right">
-            <span className="badge badge-info">AR Enabled</span>
-          </div>
+      <div className="card mb-8">
+        <div className="w-full">
+          <h3 className="text-xl font-display font-bold text-text-primary">Why Choose Autosphere</h3>
+          <p className="text-text-secondary mt-3 leading-7">
+            Build and scale your automotive business on a platform designed for serious vendors. You get streamlined product management, AR-ready merchandising that improves buyer confidence, and clear performance visibility to optimize growth decisions. With reliable infrastructure, trusted storefront experience, and flexible plans, you can move from first listings to high-volume sales with confidence.
+          </p>
         </div>
       </div>
 

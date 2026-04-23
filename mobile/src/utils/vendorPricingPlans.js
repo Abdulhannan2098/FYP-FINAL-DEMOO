@@ -1,0 +1,58 @@
+export const VENDOR_PRICING_PLANS = [
+  {
+    id: 'freemium',
+    name: 'Basic',
+    monthlyPrice: 0,
+    priceLabel: 'Free',
+    cadence: '',
+    highlight: false,
+    badge: null,
+    ctaLabel: 'Current Plan',
+    ctaVariant: 'secondary',
+    features: [
+      'Limited product listings',
+      'Image-based product display',
+      'No AR preview',
+      'Higher platform commission',
+      'Basic vendor access',
+    ],
+  },
+  {
+    id: 'standard',
+    name: 'Standard',
+    monthlyPrice: 5000,
+    priceLabel: 'Monthly',
+    cadence: 'subscription',
+    highlight: true,
+    badge: 'Recommended',
+    ctaLabel: 'Upgrade to Standard',
+    ctaVariant: 'primary',
+    features: [
+      'Medium product listing limit',
+      'Limited AR preview for selected products',
+      'Platform-provided 3D assets',
+      'Reduced commission',
+      'Better visibility than free vendors',
+    ],
+  },
+  {
+    id: 'premium',
+    name: 'Premium',
+    monthlyPrice: 10000,
+    priceLabel: 'Monthly',
+    cadence: 'subscription',
+    highlight: false,
+    badge: null,
+    ctaLabel: 'Go Premium',
+    ctaVariant: 'secondary',
+    features: [
+      'High or unlimited product listings',
+      'Full AR preview for all supported products',
+      'Featured placement in listings',
+      'Lowest commission',
+      'Priority vendor support',
+    ],
+  },
+];
+
+export const WHY_CHOOSE_AUTOSPHERE_TEXT = 'Build and scale your automotive business on a platform designed for serious vendors. You get streamlined product management, AR-ready merchandising that improves buyer confidence, and clear performance visibility to optimize growth decisions. With reliable infrastructure, trusted storefront experience, and flexible plans, you can move from first listings to high-volume sales with confidence.';

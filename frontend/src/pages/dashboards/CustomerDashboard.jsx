@@ -4,6 +4,7 @@ import api from '../../services/api';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { getPlaceholderImage } from '../../utils/constants';
 import { formatPKR } from '../../utils/currency';
+import { resolveImageUrl } from '../../utils/imageHelper';
 
 const CustomerDashboard = () => {
   const { user } = useAuth();
@@ -29,29 +30,43 @@ const CustomerDashboard = () => {
     }
   };
 
+  const normalizeOrderStatus = (status) => {
+    const normalized = String(status || '').trim().toLowerCase();
+
+    if (normalized === 'accepted') return 'In Progress';
+    if (normalized === 'rejected') return 'Cancelled';
+    if (normalized === 'completed') return 'Delivered';
+    if (normalized === 'pending') return 'Pending Vendor Action';
+    if (normalized === 'in progress') return 'In Progress';
+    if (normalized === 'shipped') return 'Shipped';
+    if (normalized === 'delivered') return 'Delivered';
+    if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+
+    return status;
+  };
+
+  const getDisplayOrderId = (order) => {
+    return String(order?.orderId || order?.orderNumber || order?._id || 'N/A');
+  };
+
   const getStatusColor = (status) => {
+    const normalized = normalizeOrderStatus(status);
     const colors = {
       'Pending Vendor Action': 'bg-yellow-900/30 border border-yellow-600/50 text-yellow-400',
-      'Accepted': 'bg-blue-900/30 border border-blue-600/50 text-blue-400',
       'In Progress': 'bg-indigo-900/30 border border-indigo-600/50 text-indigo-400',
       'Shipped': 'bg-purple-900/30 border border-purple-600/50 text-purple-400',
-      'Completed': 'bg-green-900/30 border border-green-600/50 text-green-400',
-      'Rejected': 'bg-red-900/30 border border-red-600/50 text-red-400',
+      'Delivered': 'bg-green-900/30 border border-green-600/50 text-green-400',
       'Cancelled': 'bg-red-900/30 border border-red-600/50 text-red-400',
     };
-    return colors[status] || 'bg-gray-900/30 border border-gray-600/50 text-gray-400';
+    return colors[normalized] || colors[status] || 'bg-gray-900/30 border border-gray-600/50 text-gray-400';
   };
 
   const getStatusIcon = (status) => {
+    const normalized = normalizeOrderStatus(status);
     const icons = {
       'Pending Vendor Action': (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-      'Accepted': (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       ),
       'In Progress': (
@@ -64,14 +79,9 @@ const CustomerDashboard = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
         </svg>
       ),
-      'Completed': (
+      'Delivered': (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-        </svg>
-      ),
-      'Rejected': (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       ),
       'Cancelled': (
@@ -80,7 +90,7 @@ const CustomerDashboard = () => {
         </svg>
       ),
     };
-    return icons[status] || null;
+    return icons[normalized] || icons[status] || null;
   };
 
   // Group orders by checkout session
@@ -106,13 +116,13 @@ const CustomerDashboard = () => {
   const filteredOrders = orders.filter(order => {
     if (activeTab === 'all') return true;
     if (activeTab === 'active') {
-      return ['Pending Vendor Action', 'Accepted', 'In Progress', 'Shipped'].includes(order.status);
+      return ['Pending Vendor Action', 'In Progress', 'Shipped'].includes(normalizeOrderStatus(order.status));
     }
-    if (activeTab === 'completed') {
-      return order.status === 'Completed';
+    if (activeTab === 'delivered') {
+      return normalizeOrderStatus(order.status) === 'Delivered';
     }
     if (activeTab === 'cancelled') {
-      return ['Rejected', 'Cancelled'].includes(order.status);
+      return normalizeOrderStatus(order.status) === 'Cancelled';
     }
     return true;
   });
@@ -121,8 +131,8 @@ const CustomerDashboard = () => {
 
   const stats = {
     totalOrders: orders.length,
-    activeOrders: orders.filter(o => ['Pending Vendor Action', 'Accepted', 'In Progress', 'Shipped'].includes(o.status)).length,
-    completedOrders: orders.filter(o => o.status === 'Completed').length,
+    activeOrders: orders.filter(o => ['Pending Vendor Action', 'In Progress', 'Shipped'].includes(normalizeOrderStatus(o.status))).length,
+    deliveredOrders: orders.filter(o => normalizeOrderStatus(o.status) === 'Delivered').length,
     totalSpent: orders.reduce((sum, o) => sum + o.totalAmount, 0),
   };
 
@@ -137,7 +147,7 @@ const CustomerDashboard = () => {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
       </svg>
     )},
-    { id: 'completed', label: 'Completed', icon: (
+    { id: 'delivered', label: 'Delivered', icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
@@ -161,7 +171,8 @@ const CustomerDashboard = () => {
             Welcome back, {user?.name}! Track and manage your orders.
           </p>
         </div>
-            {/* Stats Cards */}
+
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="group relative bg-gradient-to-br from-surface via-surface to-surface-light border border-primary-500/20 rounded-xl p-6 hover:border-primary-500/40 transition-all duration-300">
             <div className="flex items-center justify-between">
@@ -194,8 +205,8 @@ const CustomerDashboard = () => {
           <div className="group relative bg-gradient-to-br from-surface via-surface to-surface-light border border-green-500/20 rounded-xl p-6 hover:border-green-500/40 transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-text-secondary mb-1 font-medium">Completed</p>
-                <p className="text-3xl font-display font-bold text-green-400">{stats.completedOrders}</p>
+                <p className="text-sm text-text-secondary mb-1 font-medium">Delivered</p>
+                <p className="text-3xl font-display font-bold text-green-400">{stats.deliveredOrders}</p>
               </div>
               <div className="w-14 h-14 bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <svg className="w-7 h-7 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,8 +255,8 @@ const CustomerDashboard = () => {
               `}>
                 {tab.id === 'all' ? orders.length :
                  tab.id === 'active' ? stats.activeOrders :
-                 tab.id === 'completed' ? stats.completedOrders :
-                 orders.filter(o => ['Rejected', 'Cancelled'].includes(o.status)).length}
+                 tab.id === 'delivered' ? stats.deliveredOrders :
+                 orders.filter(o => normalizeOrderStatus(o.status) === 'Cancelled').length}
               </span>
             </button>
           ))}
@@ -300,11 +311,11 @@ const CustomerDashboard = () => {
                             <div>
                               <div className="flex items-center gap-3 mb-2">
                                 <h3 className="text-lg font-display font-bold text-text-primary">
-                                  Order #{order._id.slice(-8).toUpperCase()}
+                                  Order #{getDisplayOrderId(order)}
                                 </h3>
                                 <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.status)}`}>
                                   {getStatusIcon(order.status)}
-                                  {order.status}
+                                  {normalizeOrderStatus(order.status)}
                                 </span>
                               </div>
                               <div className="flex items-center gap-4 text-sm text-text-secondary">
@@ -376,11 +387,11 @@ const CustomerDashboard = () => {
                         <div>
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-lg font-display font-bold text-text-primary">
-                              Order #{order._id.slice(-8).toUpperCase()}
+                              Order #{getDisplayOrderId(order)}
                             </h3>
                             <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.status)}`}>
                               {getStatusIcon(order.status)}
-                              {order.status}
+                              {normalizeOrderStatus(order.status)}
                             </span>
                           </div>
                           <div className="flex items-center gap-4 text-sm text-text-secondary">
@@ -459,7 +470,7 @@ const CustomerDashboard = () => {
                   <h2 className="text-2xl font-display font-bold text-text-primary mb-1">
                     Order Details
                   </h2>
-                  <p className="text-text-secondary">#{selectedOrder._id.slice(-8).toUpperCase()}</p>
+                  <p className="text-text-secondary">#{getDisplayOrderId(selectedOrder)}</p>
                 </div>
                 <button
                   onClick={() => setShowOrderDetail(false)}
@@ -484,7 +495,7 @@ const CustomerDashboard = () => {
                     </div>
                     <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusColor(selectedOrder.status)}`}>
                       {getStatusIcon(selectedOrder.status)}
-                      {selectedOrder.status}
+                      {normalizeOrderStatus(selectedOrder.status)}
                     </span>
                   </div>
 
@@ -551,7 +562,7 @@ const CustomerDashboard = () => {
                           <div className="w-20 h-20 bg-surface-light rounded-lg overflow-hidden flex-shrink-0 border border-surface-light">
                             {item.product?.images?.[0] ? (
                               <img
-                                src={item.product.images[0].startsWith('http') ? item.product.images[0] : `http://localhost:5000${item.product.images[0]}`}
+                                src={resolveImageUrl(item.product.images[0])}
                                 alt={item.product?.name || 'Product'}
                                 className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
                                 onError={(e) => {

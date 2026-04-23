@@ -6,20 +6,41 @@ const getApiUrl = () => {
     const Constants = require('expo-constants').default;
     const { Platform } = require('react-native');
 
+    // Preferred: configure via Expo public env var (works across networks without code changes)
+    // Example (PowerShell): $env:EXPO_PUBLIC_API_URL = 'http://10.0.0.50:5000/api'
+    // Example (cmd): set EXPO_PUBLIC_API_URL=http://10.0.0.50:5000/api
+    if (process?.env?.EXPO_PUBLIC_API_URL) {
+      return process.env.EXPO_PUBLIC_API_URL;
+    }
+
     // For Android emulator, use 10.0.2.2 to access host machine
     // For iOS simulator and physical devices, use the LAN IP
     const isAndroidEmulator = Platform.OS === 'android' && !Constants.isDevice;
+
+    // Prefer deriving host machine IP from Expo host URI when available
+    // Example hostUri: "192.168.1.10:8081"
+    const hostUri =
+      Constants.expoConfig?.hostUri ||
+      Constants.manifest2?.extra?.expoClient?.hostUri ||
+      Constants.manifest?.debuggerHost;
+
+    if (hostUri && typeof hostUri === 'string') {
+      const host = hostUri.split(':')[0];
+      if (host) {
+        return `http://${host}:5000/api`;
+      }
+    }
 
     if (isAndroidEmulator) {
       // Android emulator - use special loopback IP
       return 'http://10.0.2.2:5000/api';
     } else {
       // Physical devices or iOS simulator - use config or LAN IP
-      return Constants.expoConfig?.extra?.apiUrl || 'http://192.168.100.4:5000/api';
+      return Constants.expoConfig?.extra?.apiUrl || 'http://localhost:5000/api';
     }
   } catch (error) {
     // Fallback if expo-constants is not available
-    return 'http://192.168.100.4:5000/api';
+    return process?.env?.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
   }
 };
 
@@ -35,7 +56,22 @@ export const ENDPOINTS = {
   CHANGE_PASSWORD: '/auth/change-password',
   FORGOT_PASSWORD: '/auth/forgot-password',
   VERIFY_OTP: '/auth/verify-otp',
-  RESET_PASSWORD: '/auth/reset-password',
+  VERIFY_EMAIL: '/auth/verify-email',
+  VERIFY_VENDOR_EMAIL: '/vendor/verify-email',
+  RESEND_VERIFICATION_OTP: '/auth/resend-verification-otp',
+  VENDOR_PRE_REGISTER_SEND_EMAIL_OTP: '/vendor/pre-register/send-email-otp',
+  VENDOR_PRE_REGISTER_SEND_PHONE_OTP: '/vendor/pre-register/send-phone-otp',
+  VENDOR_PRE_REGISTER_VERIFY_EMAIL_OTP: '/vendor/pre-register/verify-email-otp',
+  VENDOR_PRE_REGISTER_VERIFY_PHONE_OTP: '/vendor/pre-register/verify-phone-otp',
+  VENDOR_PRE_REGISTER_CHECK_VERIFICATION: '/vendor/pre-register/check-verification',
+  VERIFY_PHONE: '/vendor/verify-phone',
+  RESEND_PHONE_OTP: '/vendor/resend-phone-otp',
+  VENDOR_REGISTER: '/vendor/register',
+  VENDOR_VERIFICATION_STATUS: '/vendor/verification-status',
+  VENDOR_VERIFICATION_CNIC: '/vendor/verification/cnic',
+  VENDOR_VERIFICATION_PROCESS: '/vendor/verification/process',
+  VENDOR_VERIFICATION_RETRY: '/vendor/verification/retry',
+  RESET_PASSWORD: '/auth/reset-password/:resetToken',
 
   // Products
   PRODUCTS: '/products',

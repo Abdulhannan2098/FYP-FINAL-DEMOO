@@ -61,8 +61,16 @@ const VendorProfileScreen = ({ navigation }) => {
           )}
         </View>
         <Text style={styles.name}>{user?.name}</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Vendor</Text>
+        <View style={styles.badgesRow}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Vendor</Text>
+          </View>
+          {user?.vendorStatus === 'verified' && (
+            <View style={[styles.badge, styles.verifiedBadge]}>
+              <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" />
+              <Text style={styles.badgeText}>Verified</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -190,11 +198,29 @@ const styles = StyleSheet.create({
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.xs,
   },
+  badgesRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    alignItems: 'center',
+  },
   badge: {
     backgroundColor: theme.colors.primary[500],
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.borderRadius.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  verifiedBadge: {
+    backgroundColor: '#10B981',
+    borderWidth: 1,
+    borderColor: '#06B6D4',
+    shadowColor: '#06B6D4',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 3,
   },
   badgeText: {
     fontSize: theme.typography.fontSize.xs,
@@ -263,6 +289,7 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'center',
     paddingVertical: theme.spacing['3xl'],
+    paddingBottom: 80,
   },
   footerText: {
     fontSize: theme.typography.fontSize.xs,

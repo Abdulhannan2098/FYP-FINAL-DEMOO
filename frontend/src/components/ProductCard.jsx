@@ -5,6 +5,7 @@ import { formatPKR } from '../utils/currency';
 import StarRating from './StarRating';
 import { useWishlist } from '../context/WishlistContext';
 import { Heart } from 'lucide-react';
+import { resolveImageUrl } from '../utils/imageHelper';
 
 // PERFORMANCE: Memoize ProductCard to prevent unnecessary re-renders
 const ProductCard = memo(({ product }) => {
@@ -12,7 +13,7 @@ const ProductCard = memo(({ product }) => {
   const inWishlist = isInWishlist(product._id);
 
   const productImage = product.images && product.images.length > 0
-    ? (product.images[0].startsWith('http') ? product.images[0] : `http://localhost:5000${product.images[0]}`)
+    ? resolveImageUrl(product.images[0])
     : getPlaceholderImage(product.category);
 
   const handleWishlistClick = (e) => {

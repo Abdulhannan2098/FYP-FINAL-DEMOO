@@ -2,10 +2,8 @@
  * Accurate AR Viewer Component
  *
  * Main AR experience component that integrates:
- * - Car detection using MediaPipe/COCO-SSD
- * - Part estimation for accurate placement
  * - Color customization
- * - Manual adjustment fallback
+ * - Core 3D/AR preview
  *
  * Replaces the previous AdvancedARViewer with improved accuracy.
  */
@@ -14,18 +12,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import '@google/model-viewer';
 
 import {
-  getCarDetector,
-  getPartEstimator,
-  getPlacementEngine,
   getColorManager,
   getProductType,
   UI_MESSAGES,
-  DETECTION_TIMEOUT_MS,
-  MAX_DETECTION_ATTEMPTS,
   AUTOMOTIVE_COLORS,
 } from '../core/index.js';
 
-import PlacementGuide from './PlacementGuide.jsx';
 import ColorPicker from './ColorPicker.jsx';
 
 /**
@@ -37,33 +29,21 @@ import ColorPicker from './ColorPicker.jsx';
 const AccurateARViewer = ({ product, onClose }) => {
   // Refs
   const modelViewerRef = useRef(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const detectorRef = useRef(null);
-  const estimatorRef = useRef(null);
   const colorManagerRef = useRef(null);
-  const detectionLoopRef = useRef(null);
 
   // Core state
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState(UI_MESSAGES.initializing);
   const [error, setError] = useState(null);
   const [isModelReady, setIsModelReady] = useState(false);
-  const [isDetectorReady, setIsDetectorReady] = useState(false);
 
   // AR state
   const [isARSupported, setIsARSupported] = useState(false);
   const [isInARMode, setIsInARMode] = useState(false);
-  const [isDetecting, setIsDetecting] = useState(false);
-  const [detection, setDetection] = useState(null);
-  const [placementGuide, setPlacementGuide] = useState(null);
-  const [detectionAttempts, setDetectionAttempts] = useState(0);
 
   // Feature state
   const [selectedColor, setSelectedColor] = useState(AUTOMOTIVE_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showManualMode, setShowManualMode] = useState(false);
-  const [showCameraPreview, setShowCameraPreview] = useState(false); // For testing detection
 
   // Derived values
   const productType = getProductType(product);
@@ -81,16 +61,7 @@ const AccurateARViewer = ({ product, onClose }) => {
 
     const initialize = async () => {
       try {
-        // Initialize detector
-        setLoadingMessage(UI_MESSAGES.loadingDetector);
-        detectorRef.current = getCarDetector();
-        await detectorRef.current.initialize();
-
         if (!mounted) return;
-        setIsDetectorReady(true);
-
-        // Initialize estimator
-        estimatorRef.current = getPartEstimator();
 
         // Initialize color manager (will be set up when model loads)
         colorManagerRef.current = getColorManager();
@@ -99,9 +70,7 @@ const AccurateARViewer = ({ product, onClose }) => {
       } catch (err) {
         console.error('[AccurateARViewer] Initialization error:', err);
         if (mounted) {
-          // Don't show error for detector failure - manual mode still works
-          setIsDetectorReady(false);
-          console.warn('[AccurateARViewer] Detector unavailable, manual mode only');
+          setError('Failed to initialize AR viewer');
         }
       }
     };
@@ -110,7 +79,6 @@ const AccurateARViewer = ({ product, onClose }) => {
 
     return () => {
       mounted = false;
-      stopDetection();
     };
   }, []);
 
@@ -175,123 +143,11 @@ const AccurateARViewer = ({ product, onClose }) => {
 
       if (status === 'session-started') {
         setIsInARMode(true);
-        // Start detection if detector is ready
-        if (isDetectorReady) {
-          startDetection();
-        }
       } else if (status === 'not-presenting') {
         setIsInARMode(false);
-        stopDetection();
       }
     },
-    [isDetectorReady]
-  );
-
-  // ============================================================================
-  // DETECTION
-  // ============================================================================
-
-  /**
-   * Toggle camera preview for testing detection
-   */
-  const toggleCameraPreview = useCallback(async () => {
-    if (showCameraPreview) {
-      // Stop camera
-      stopDetection();
-      setShowCameraPreview(false);
-    } else {
-      // Start camera and detection
-      setShowCameraPreview(true);
-      await startDetection();
-    }
-  }, [showCameraPreview]);
-
-  /**
-   * Start detection loop
-   */
-  const startDetection = useCallback(async () => {
-    if (!detectorRef.current?.isReady() || isDetecting) return;
-
-    setIsDetecting(true);
-    setDetectionAttempts(0);
-    console.log('[AccurateARViewer] Starting detection');
-
-    // Set up video stream for detection
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 640, height: 480 },
-      });
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-
-        // Start continuous detection
-        detectorRef.current.startContinuousDetection(
-          videoRef.current,
-          handleDetectionResult
-        );
-
-        // Set timeout for manual mode fallback
-        setTimeout(() => {
-          if (detectionAttempts > MAX_DETECTION_ATTEMPTS) {
-            setShowManualMode(true);
-          }
-        }, DETECTION_TIMEOUT_MS);
-      }
-    } catch (err) {
-      console.error('[AccurateARViewer] Camera access error:', err);
-      setShowManualMode(true);
-      setShowCameraPreview(false);
-    }
-  }, [isDetecting, detectionAttempts]);
-
-  /**
-   * Stop detection loop
-   */
-  const stopDetection = useCallback(() => {
-    if (detectorRef.current) {
-      detectorRef.current.stopContinuousDetection();
-    }
-
-    if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
-      videoRef.current.srcObject = null;
-    }
-
-    setIsDetecting(false);
-    setDetection(null);
-    setPlacementGuide(null);
-    console.log('[AccurateARViewer] Stopped detection');
-  }, []);
-
-  /**
-   * Handle detection results
-   */
-  const handleDetectionResult = useCallback(
-    (result) => {
-      setDetectionAttempts((prev) => prev + 1);
-
-      if (!result?.detected) {
-        setDetection(result);
-        setPlacementGuide(null);
-        return;
-      }
-
-      setDetection(result);
-
-      // Get placement guide
-      if (estimatorRef.current) {
-        const guide = estimatorRef.current.getPlacementGuide(
-          result.boundingBox,
-          result.viewAngle,
-          productType,
-          product
-        );
-        setPlacementGuide(guide);
-      }
-    },
-    [productType, product]
+    []
   );
 
   // ============================================================================
@@ -318,12 +174,6 @@ const AccurateARViewer = ({ product, onClose }) => {
   const getStatusMessage = () => {
     if (error) return error;
     if (isLoading) return loadingMessage;
-    if (isInARMode && isDetecting) {
-      if (detection?.detected) {
-        return `Car detected - ${detection.viewAngle} view`;
-      }
-      return UI_MESSAGES.searchingCar;
-    }
     return isARSupported ? 'Ready for AR' : '3D Preview Mode';
   };
 
@@ -354,14 +204,6 @@ const AccurateARViewer = ({ product, onClose }) => {
 
   return (
     <div style={styles.container}>
-      {/* Video for detection - visible when camera preview is active */}
-      <video
-        ref={videoRef}
-        style={showCameraPreview ? styles.cameraPreview : styles.hiddenVideo}
-        playsInline
-        muted
-      />
-
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
@@ -373,7 +215,7 @@ const AccurateARViewer = ({ product, onClose }) => {
           <div>
             <h2 style={styles.headerTitle}>{product.name}</h2>
             <p style={styles.headerSubtitle}>
-              <span style={styles.statusDot} className={detection?.detected ? 'active' : ''} />
+              <span style={styles.statusDot} className={isModelReady ? 'active' : ''} />
               {getStatusMessage()}
             </p>
           </div>
@@ -415,9 +257,7 @@ const AccurateARViewer = ({ product, onClose }) => {
                 <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               <div style={styles.arButtonText}>
-                <span style={styles.arButtonMain}>
-                  {isDetectorReady ? 'View in AR (Smart Placement)' : 'View in Your Space'}
-                </span>
+                <span style={styles.arButtonMain}>View in Your Space</span>
                 <span style={styles.arButtonSub}>
                   {selectedColor.name} • {productType}
                 </span>
@@ -433,86 +273,7 @@ const AccurateARViewer = ({ product, onClose }) => {
             </div>
           )}
         </model-viewer>
-
-        {/* Detection Overlay (in AR mode or camera preview) */}
-        {(isInARMode || showCameraPreview) && detection && placementGuide && (
-          <PlacementGuide
-            detection={detection}
-            guide={placementGuide}
-            productType={productType}
-            isPlacing={false}
-          />
-        )}
-
-        {/* Camera Preview Status Bar */}
-        {showCameraPreview && (
-          <div style={styles.cameraStatusBar}>
-            <div style={styles.cameraStatusDot} className={detection?.detected ? 'detected' : ''} />
-            <span style={styles.cameraStatusText}>
-              {detection?.detected
-                ? `Car Detected (${Math.round(detection.confidence * 100)}%) - ${detection.viewAngle} view`
-                : 'Searching for car... Point camera at a vehicle'}
-            </span>
-          </div>
-        )}
       </div>
-
-      {/* Action Buttons */}
-      {isModelReady && !isLoading && !isInARMode && (
-        <div style={styles.actionButtons}>
-          {/* Color Picker Button */}
-          <button
-            style={styles.actionBtn}
-            onClick={() => setShowColorPicker(true)}
-            title="Change Color"
-          >
-            <div style={{ ...styles.colorPreview, backgroundColor: selectedColor.hex }} />
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343" />
-            </svg>
-          </button>
-
-          {/* Camera Detection Test Button */}
-          {isDetectorReady && (
-            <button
-              style={{
-                ...styles.actionBtn,
-                backgroundColor: showCameraPreview ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.2)',
-              }}
-              onClick={toggleCameraPreview}
-              title={showCameraPreview ? 'Stop Camera' : 'Test Car Detection'}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                {showCameraPreview ? (
-                  <path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                ) : (
-                  <>
-                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-                    <circle cx="12" cy="13" r="4" />
-                  </>
-                )}
-              </svg>
-            </button>
-          )}
-
-          {/* Detection Status */}
-          <button
-            style={{
-              ...styles.actionBtn,
-              backgroundColor: isDetectorReady ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-            }}
-            title={isDetectorReady ? 'Smart Detection Ready' : 'Manual Mode Only'}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {isDetectorReady ? (
-                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              ) : (
-                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              )}
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Color Picker Modal */}
       <ColorPicker
@@ -522,25 +283,30 @@ const AccurateARViewer = ({ product, onClose }) => {
         onClose={() => setShowColorPicker(false)}
       />
 
-      {/* Bottom Info Bar */}
+      {/* Controls Panel (non-overlapping) */}
       {isModelReady && !isLoading && !isInARMode && (
-        <div style={styles.bottomBar}>
-          <div style={styles.bottomBarContent}>
-            <div style={styles.bottomInfo}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 16v-4M12 8h.01" />
+        <div style={styles.controlsPanel}>
+          <div style={styles.controlsContent}>
+            <div style={styles.controlsInfo}>
+              <p style={styles.controlsTitle}>Controls</p>
+              <p style={styles.controlsHint}>Rotate: drag. Zoom: pinch or scroll.</p>
+            </div>
+
+            <button
+              style={styles.controlsColorButton}
+              onClick={() => setShowColorPicker(true)}
+              title="Change Color"
+            >
+              <div style={{ ...styles.controlsColorSwatch, backgroundColor: selectedColor.hex }} />
+              <span style={styles.controlsColorLabel}>Color</span>
+              <span style={styles.controlsColorValue}>{selectedColor.name}</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343" />
               </svg>
-              <div>
-                <p style={styles.bottomInfoMain}>
-                  {isDetectorReady
-                    ? 'Smart placement will detect your car automatically'
-                    : 'Manual placement mode - drag to position'}
-                </p>
-                <p style={styles.bottomInfoSub}>
-                  Selected: {selectedColor.name}
-                </p>
-              </div>
+            </button>
+
+            <div style={styles.controlsMeta}>
+              Selected: {selectedColor.name}
             </div>
           </div>
         </div>
@@ -649,6 +415,7 @@ const styles = {
   },
   viewerContainer: {
     flex: 1,
+    minHeight: 0,
     position: 'relative',
     backgroundColor: '#0f172a',
   },
@@ -658,51 +425,9 @@ const styles = {
     '--poster-color': '#111827',
     '--progress-bar-color': '#6366f1',
   },
-  hiddenVideo: {
-    position: 'absolute',
-    width: '1px',
-    height: '1px',
-    opacity: 0,
-    pointerEvents: 'none',
-  },
-  cameraPreview: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    zIndex: 5,
-  },
-  cameraStatusBar: {
-    position: 'absolute',
-    top: '16px',
-    left: '16px',
-    right: '16px',
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    borderRadius: '12px',
-    padding: '12px 16px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    zIndex: 10,
-    backdropFilter: 'blur(8px)',
-  },
-  cameraStatusDot: {
-    width: '10px',
-    height: '10px',
-    borderRadius: '50%',
-    backgroundColor: '#f59e0b',
-    animation: 'pulse 1.5s ease-in-out infinite',
-  },
-  cameraStatusText: {
-    color: 'white',
-    fontSize: '13px',
-    fontWeight: '500',
-  },
   arButton: {
     position: 'absolute',
-    bottom: '100px',
+    bottom: '32px',
     left: '50%',
     transform: 'translateX(-50%)',
     width: 'calc(100% - 48px)',
@@ -755,66 +480,69 @@ const styles = {
     color: 'white',
     fontSize: '14px',
   },
-  actionButtons: {
-    position: 'absolute',
-    top: '80px',
-    right: '16px',
+  controlsPanel: {
+    borderTop: '1px solid #374151',
+    backgroundColor: 'rgba(31, 41, 55, 0.95)',
+    padding: '12px 16px',
+    backdropFilter: 'blur(8px)',
+  },
+  controlsContent: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '12px',
+  },
+  controlsInfo: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
-    zIndex: 20,
+    gap: '4px',
+    minWidth: '180px',
+    flex: '1 1 240px',
   },
-  actionBtn: {
-    width: '52px',
-    height: '52px',
+  controlsTitle: {
+    margin: 0,
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#e5e7eb',
+  },
+  controlsHint: {
+    margin: 0,
+    fontSize: '12px',
+    color: '#9ca3af',
+  },
+  controlsColorButton: {
+    border: '1px solid rgba(99, 102, 241, 0.45)',
+    borderRadius: '12px',
     backgroundColor: 'rgba(99, 102, 241, 0.2)',
-    border: 'none',
-    borderRadius: '14px',
     color: 'white',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+    gap: '8px',
+    padding: '8px 10px',
+    minHeight: '42px',
+    flex: '0 0 auto',
   },
-  colorPreview: {
-    position: 'absolute',
-    top: '6px',
-    right: '6px',
+  controlsColorSwatch: {
     width: '14px',
     height: '14px',
     borderRadius: '50%',
-    border: '2px solid white',
+    border: '2px solid rgba(255, 255, 255, 0.9)',
   },
-  bottomBar: {
-    position: 'absolute',
-    bottom: '16px',
-    left: '16px',
-    right: '16px',
-    zIndex: 20,
+  controlsColorLabel: {
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#dbeafe',
   },
-  bottomBarContent: {
-    backgroundColor: 'rgba(31, 41, 55, 0.95)',
-    borderRadius: '16px',
-    padding: '14px 16px',
-    backdropFilter: 'blur(8px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+  controlsColorValue: {
+    fontSize: '12px',
+    color: '#e5e7eb',
   },
-  bottomInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    color: 'white',
-  },
-  bottomInfoMain: {
-    margin: 0,
-    fontSize: '13px',
-    fontWeight: '600',
-  },
-  bottomInfoSub: {
-    margin: 0,
+  controlsMeta: {
     fontSize: '11px',
     color: '#9ca3af',
+    marginLeft: 'auto',
   },
   errorPanel: {
     backgroundColor: '#1f2937',
@@ -868,13 +596,6 @@ if (typeof document !== 'undefined') {
     styleSheet.textContent = `
       @keyframes spin {
         to { transform: rotate(360deg); }
-      }
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-      }
-      .detected {
-        background-color: #22c55e !important;
       }
       .active {
         background-color: #22c55e !important;

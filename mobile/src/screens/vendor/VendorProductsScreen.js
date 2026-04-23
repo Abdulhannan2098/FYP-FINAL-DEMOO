@@ -218,6 +218,7 @@ const VendorProductsScreen = ({ navigation, route }) => {
   };
 
   const handleSaveProduct = async () => {
+    if (saving) return;
     if (!validateForm()) return;
 
     // Validate images for new product
@@ -295,10 +296,12 @@ const VendorProductsScreen = ({ navigation, route }) => {
         }
       }
 
-      Alert.alert(
-        'Success',
-        editingProduct ? 'Product updated successfully' : 'Product created successfully'
-      );
+      // Use AI-decision message from backend for new products; generic message for edits
+      const successMessage = editingProduct
+        ? 'Product updated successfully'
+        : response.data?.message || 'Product submitted successfully';
+
+      Alert.alert('Success', successMessage);
       setModalVisible(false);
       fetchProducts();
     } catch (error) {
@@ -337,12 +340,30 @@ const VendorProductsScreen = ({ navigation, route }) => {
     );
   };
 
+  const getStatusMessage = (product) => {
+    const normalized = (product?.approvalStatus ?? '').toString().trim().toLowerCase();
+    if (normalized === 'rejected') {
+      return {
+        text: 'Not approved — does not fit our car modification & customisation category.',
+        style: styles.statusMsgRejected,
+      };
+    }
+    if (normalized !== 'approved' && product?.isApproved !== true) {
+      return {
+        text: 'Under review. Our team will verify it shortly.',
+        style: styles.statusMsgPending,
+      };
+    }
+    return null;
+  };
+
   const GridProductCard = ({ product }) => {
     const imageUrl = getProductImageUrl(product);
     const productName = product?.name || 'Unknown Product';
     const productPrice = product?.price || 0;
     const productStock = typeof product?.stock === 'number' ? product.stock : null;
     const approvalMeta = getApprovalMeta(product);
+    const statusMsg = getStatusMessage(product);
 
     return (
       <View style={[styles.gridItemWrap, { width: cardWidth }]}>
@@ -385,6 +406,13 @@ const VendorProductsScreen = ({ navigation, route }) => {
                 </View>
               )}
             </View>
+            {statusMsg && (
+              <View style={[styles.statusMsgStrip, statusMsg.style]}>
+                <Text style={styles.statusMsgText} numberOfLines={3}>
+                  {statusMsg.text}
+                </Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
       </View>
@@ -596,7 +624,7 @@ const styles = StyleSheet.create({
   },
   gridList: {
     paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing['2xl'],
+    paddingBottom: 80,
     paddingHorizontal: theme.spacing.lg,
   },
   gridRow: {
@@ -718,6 +746,27 @@ const styles = StyleSheet.create({
   },
   stockPillTextOut: {
     color: '#fca5a5',
+  },
+  statusMsgStrip: {
+    marginTop: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 5,
+  },
+  statusMsgRejected: {
+    backgroundColor: 'rgba(239, 68, 68, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  statusMsgPending: {
+    backgroundColor: 'rgba(245, 158, 11, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  statusMsgText: {
+    fontSize: 9.5,
+    color: theme.colors.text.secondary,
+    lineHeight: 13,
   },
   modalSafeArea: {
     flex: 1,

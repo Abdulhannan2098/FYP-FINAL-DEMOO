@@ -16,6 +16,7 @@ import { productService } from '../../api/productService';
 import { orderService } from '../../api/orderService';
 import Loading from '../../components/Loading';
 import { formatPrice } from '../../utils/formatters';
+import { getDisplayOrderNumber } from '../../utils/orderNumber';
 import theme from '../../styles/theme';
 import { getUserAvatarUri, getUserInitial } from '../../utils/userAvatar';
 import { useAuth } from '../../context/AuthContext';
@@ -178,7 +179,7 @@ const DashboardScreen = ({ navigation }) => {
   );
 
   const RecentOrderRow = ({ order }) => {
-    const orderNo = order?.orderNumber || order?._id?.slice?.(-6) || '—';
+    const orderNo = getDisplayOrderNumber(order);
     const status = order?.status || 'Pending';
     const amount = formatPrice(order?.totalAmount || 0);
     const date = order?.createdAt ? new Date(order.createdAt).toLocaleDateString() : '';
@@ -205,9 +206,8 @@ const DashboardScreen = ({ navigation }) => {
   const fulfillmentRate = stats.totalOrders > 0 ? Math.round((stats.completedOrders / stats.totalOrders) * 100) : 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <ScrollView
-        style={styles.container}
         contentContainerStyle={styles.contentContainer}
         refreshControl={
           <RefreshControl
@@ -223,14 +223,21 @@ const DashboardScreen = ({ navigation }) => {
           colors={['rgba(185, 28, 28, 0.35)', 'rgba(23, 23, 23, 0.0)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={[styles.hero, { paddingTop: theme.spacing.md + insets.top }]}
+          style={[styles.hero, { paddingTop: theme.spacing.md }]}
         >
           <View style={styles.heroTopRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.heroKicker}>{getGreeting()}</Text>
-              <Text style={styles.heroTitle} numberOfLines={1}>
-                {user?.name ? user.name : 'Vendor'}
-              </Text>
+              <View style={styles.heroNameRow}>
+                <Text style={styles.heroTitle} numberOfLines={1}>
+                  {user?.name ? user.name : 'Vendor'}
+                </Text>
+                {user?.vendorStatus === 'verified' && (
+                  <View style={styles.verifiedSmallBadge}>
+                    <Ionicons name="checkmark-circle-sharp" size={16} color="#10B981" />
+                  </View>
+                )}
+              </View>
               <Text style={styles.heroSubtitle} numberOfLines={1}>
                 Track orders, products, and performance
               </Text>
@@ -318,6 +325,25 @@ const DashboardScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.pricingEntryCard}
+            activeOpacity={0.88}
+            onPress={() => navigateTab('VendorProfile', { screen: 'VendorPricing' })}
+          >
+            <View style={styles.pricingEntryLeft}>
+              <View style={styles.pricingEntryIconWrap}>
+                <Ionicons name="pricetags-outline" size={18} color={theme.colors.primary[500]} />
+              </View>
+              <View>
+                <Text style={styles.pricingEntryTitle}>Pricing Plans</Text>
+                <Text style={styles.pricingEntrySubtitle}>Compare Basic, Standard, and Premium plans</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.text.tertiary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Recent orders</Text>
             <TouchableOpacity onPress={() => navigateTab('VendorOrders')} activeOpacity={0.85}>
@@ -358,7 +384,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.primary,
   },
   contentContainer: {
-    paddingBottom: theme.spacing['2xl'],
+    paddingBottom: 80,
+    flexGrow: 1,
   },
   hero: {
     paddingHorizontal: theme.spacing.lg,
@@ -378,11 +405,23 @@ const styles = StyleSheet.create({
     color: theme.colors.text.tertiary,
     fontWeight: theme.typography.fontWeight.semibold,
   },
+  heroNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
   heroTitle: {
     marginTop: 2,
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text.primary,
+  },
+  verifiedSmallBadge: {
+    padding: theme.spacing.xs,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: '#10B981',
   },
   heroSubtitle: {
     marginTop: 4,
@@ -635,6 +674,43 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     color: theme.colors.text.secondary,
     fontWeight: theme.typography.fontWeight.semibold,
+  },
+  pricingEntryCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.secondary[800],
+    padding: theme.spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...theme.shadows.soft,
+  },
+  pricingEntryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    flex: 1,
+  },
+  pricingEntryIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${theme.colors.primary[500]}18`,
+    borderWidth: 1,
+    borderColor: `${theme.colors.primary[500]}33`,
+  },
+  pricingEntryTitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.text.primary,
+  },
+  pricingEntrySubtitle: {
+    marginTop: 2,
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.text.secondary,
   },
   footer: {
     padding: theme.spacing.lg,

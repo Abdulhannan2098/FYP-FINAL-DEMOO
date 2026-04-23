@@ -28,11 +28,15 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiUrl": "http://192.168.100.4:5000/api",
+      "apiUrl": "http://172.20.10.2:5000/api",
       "googleExpoClientId": "",
       "googleAndroidClientId": "",
       "googleIosClientId": "",
       "googleWebClientId": ""
-    }
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ]
   }
 }

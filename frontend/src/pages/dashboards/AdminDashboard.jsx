@@ -3,6 +3,24 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../services/api';
 import { getPlaceholderImage } from '../../utils/constants';
 import { formatPKR } from '../../utils/currency';
+import { resolveImageUrl } from '../../utils/imageHelper';
+
+const normalizeOrderStatus = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
+
+  if (normalized === 'accepted') return 'In Progress';
+  if (normalized === 'rejected') return 'Cancelled';
+  if (normalized === 'completed') return 'Delivered';
+  if (normalized === 'pending') return 'Pending Vendor Action';
+  if (normalized === 'in progress') return 'In Progress';
+  if (normalized === 'shipped') return 'Shipped';
+  if (normalized === 'delivered') return 'Delivered';
+  if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+
+  return status;
+};
+
+const getDisplayOrderId = (order) => String(order?.orderId || order?.orderNumber || order?._id || 'N/A');
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -12,6 +30,7 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('products');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [productActionLoading, setProductActionLoading] = useState(false);
 
   const [selectedOrderIds, setSelectedOrderIds] = useState(() => new Set());
   const [deletingOrders, setDeletingOrders] = useState(false);
@@ -45,8 +64,24 @@ const AdminDashboard = () => {
     }
   };
 
+  const applyProductUpdate = (updatedProduct) => {
+    if (!updatedProduct?._id) return;
+
+    setProducts((prev) => prev.map((p) => (p._id === updatedProduct._id ? { ...p, ...updatedProduct } : p)));
+    setSelectedProduct((prev) => {
+      if (!prev || prev._id !== updatedProduct._id) return prev;
+      return { ...prev, ...updatedProduct };
+    });
+  };
+
+  const removeProductFromState = (productId) => {
+    setProducts((prev) => prev.filter((p) => p._id !== productId));
+    setSelectedProduct((prev) => (prev?._id === productId ? null : prev));
+  };
+
   const isOrderDeletable = (order) => {
-    return order?.status === 'Shipped' || order?.status === 'Completed';
+    const normalized = normalizeOrderStatus(order?.status);
+    return normalized === 'Shipped' || normalized === 'Delivered';
   };
 
   const selectableOrderIds = useMemo(() => {
@@ -113,7 +148,7 @@ const AdminDashboard = () => {
     if (idsToDelete.length === 0) return;
 
     const ok = confirm(
-      `Delete ${idsToDelete.length} shipped/completed order${idsToDelete.length === 1 ? '' : 's'}? This cannot be undone.`
+      `Delete ${idsToDelete.length} shipped/delivered order${idsToDelete.length === 1 ? '' : 's'}? This cannot be undone.`
     );
     if (!ok) return;
 
@@ -135,6 +170,7 @@ const AdminDashboard = () => {
 
   const handleApproveProduct = async (productId, action) => {
     try {
+      setProductActionLoading(true);
       let rejectionReason = '';
 
       if (action === 'reject') {
@@ -145,15 +181,27 @@ const AdminDashboard = () => {
         }
       }
 
-      await api.put(`/products/${productId}/approve`, {
+      const response = await api.put(`/products/${productId}/approve`, {
         action,
         rejectionReason
       });
+
+      const serverProduct = response?.data?.data;
+      const updatedProduct = serverProduct || {
+        _id: productId,
+        approvalStatus: action === 'approve' ? 'Approved' : 'Rejected',
+        isApproved: action === 'approve',
+        rejectionReason: action === 'reject' ? rejectionReason : '',
+      };
+
+      applyProductUpdate(updatedProduct);
 
       alert(`Product ${action === 'approve' ? 'approved' : 'rejected'} successfully`);
       fetchAdminData();
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to update product status');
+    } finally {
+      setProductActionLoading(false);
     }
   };
 
@@ -161,7 +209,9 @@ const AdminDashboard = () => {
     if (!confirm('Are you sure you want to delete this product?')) return;
 
     try {
+      setProductActionLoading(true);
       await api.delete(`/products/${productId}`);
+      removeProductFromState(productId);
       alert('Product deleted successfully');
       setShowProductModal(false);
       setSelectedProduct(null);
@@ -169,6 +219,8 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Failed to delete product', error);
       alert('Failed to delete product');
+    } finally {
+      setProductActionLoading(false);
     }
   };
 
@@ -181,6 +233,22 @@ const AdminDashboard = () => {
     setShowProductModal(false);
     setSelectedProduct(null);
   };
+
+  useEffect(() => {
+    if (!selectedProduct) return;
+
+    const refreshedProduct = products.find((p) => p._id === selectedProduct._id);
+
+    if (!refreshedProduct) {
+      setShowProductModal(false);
+      setSelectedProduct(null);
+      return;
+    }
+
+    if (refreshedProduct !== selectedProduct) {
+      setSelectedProduct(refreshedProduct);
+    }
+  }, [products, selectedProduct]);
 
   if (loading) {
     return (
@@ -319,7 +387,7 @@ const AdminDashboard = () => {
                             <div className="w-12 h-12 flex-shrink-0">
                               {product.images && product.images.length > 0 ? (
                                 <img
-                                  src={product.images[0].startsWith('http') ? product.images[0] : `http://localhost:5000${product.images[0]}`}
+                                  src={resolveImageUrl(product.images[0])}
                                   alt={product.name}
                                   className="w-12 h-12 object-cover rounded-lg border border-surface-light"
                                   onError={(e) => {
@@ -351,15 +419,30 @@ const AdminDashboard = () => {
                           <span className="text-sm text-text-secondary">{product.stock}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium inline-block ${
-                            product.approvalStatus === 'Approved'
-                              ? 'bg-green-900/30 border border-green-600 text-green-400'
-                              : product.approvalStatus === 'Rejected'
-                              ? 'bg-red-900/30 border border-red-600 text-red-400'
-                              : 'bg-yellow-900/30 border border-yellow-600 text-yellow-400'
-                          }`}>
-                            {product.approvalStatus || 'Pending'}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium inline-block w-fit ${
+                              product.approvalStatus === 'Approved'
+                                ? 'bg-green-900/30 border border-green-600 text-green-400'
+                                : product.approvalStatus === 'Rejected'
+                                ? 'bg-red-900/30 border border-red-600 text-red-400'
+                                : 'bg-yellow-900/30 border border-yellow-600 text-yellow-400'
+                            }`}>
+                              {product.approvalStatus || 'Pending'}
+                            </span>
+                            {product.aiDecision && (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide w-fit ${
+                                product.aiDecision === 'auto_approved'
+                                  ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700/40'
+                                  : product.aiDecision === 'auto_rejected'
+                                  ? 'bg-red-900/40 text-red-300 border border-red-700/40'
+                                  : 'bg-blue-900/40 text-blue-300 border border-blue-700/40'
+                              }`}>
+                                {product.aiDecision === 'auto_approved' ? '✓ Auto Approved' :
+                                 product.aiDecision === 'auto_rejected' ? '✗ Auto Rejected' :
+                                 '⚑ AI Flagged'}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <button
@@ -388,7 +471,7 @@ const AdminDashboard = () => {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
               <div>
                 <h2 className="heading-2">All Orders</h2>
-                <p className="text-sm text-text-tertiary mt-1">Select shipped/completed orders to delete</p>
+                <p className="text-sm text-text-tertiary mt-1">Select shipped/delivered orders to delete</p>
               </div>
 
               <div className="flex items-center gap-3">
@@ -403,7 +486,7 @@ const AdminDashboard = () => {
                       ? 'bg-surface-light border-surface-light text-text-tertiary cursor-not-allowed'
                       : 'bg-red-900/20 border-red-600/30 text-red-400 hover:bg-red-900/30 hover:border-red-500/50'
                   }`}
-                  title={hasSomeSelected ? 'Delete selected shipped orders' : 'Select shipped/completed orders to delete'}
+                  title={hasSomeSelected ? 'Delete selected shipped orders' : 'Select shipped/delivered orders to delete'}
                   aria-label="Delete selected orders"
                 >
                   {deletingOrders ? (
@@ -437,7 +520,7 @@ const AdminDashboard = () => {
                             onChange={toggleSelectAllOrders}
                             disabled={selectableOrderIds.length === 0}
                             className="h-4 w-4 rounded border-surface-light bg-surface text-primary-500 focus:ring-primary-500"
-                            aria-label="Select all shipped/completed orders"
+                            aria-label="Select all shipped/delivered orders"
                           />
                           <span>Select</span>
                         </div>
@@ -463,12 +546,12 @@ const AdminDashboard = () => {
                             className={`h-4 w-4 rounded border-surface-light bg-surface focus:ring-primary-500 ${
                               isOrderDeletable(order) ? 'text-primary-500' : 'text-text-tertiary cursor-not-allowed'
                             }`}
-                            aria-label={`Select order ${order._id.slice(-8)}`}
-                            title={isOrderDeletable(order) ? 'Select to delete' : 'Only shipped/completed orders can be deleted'}
+                            aria-label={`Select order ${getDisplayOrderId(order)}`}
+                            title={isOrderDeletable(order) ? 'Select to delete' : 'Only shipped/delivered orders can be deleted'}
                           />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-primary">
-                          #{order._id.slice(-8)}
+                          #{getDisplayOrderId(order)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">
                           {order.customer?.name || 'N/A'}
@@ -484,19 +567,19 @@ const AdminDashboard = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            order.status === 'Completed'
+                            normalizeOrderStatus(order.status) === 'Delivered'
                               ? 'bg-green-900/30 border border-green-600 text-green-400'
-                              : order.status === 'Rejected' || order.status === 'Cancelled'
+                              : normalizeOrderStatus(order.status) === 'Cancelled'
                               ? 'bg-red-900/30 border border-red-600 text-red-400'
-                              : order.status === 'Shipped'
+                              : normalizeOrderStatus(order.status) === 'Shipped'
                               ? 'bg-blue-900/30 border border-blue-600 text-blue-400'
-                              : order.status === 'In Progress'
+                              : normalizeOrderStatus(order.status) === 'In Progress'
                               ? 'bg-purple-900/30 border border-purple-600 text-purple-400'
-                              : order.status === 'Accepted'
-                              ? 'bg-cyan-900/30 border border-cyan-600 text-cyan-400'
+                              : normalizeOrderStatus(order.status) === 'Pending Vendor Action'
+                              ? 'bg-amber-900/30 border border-amber-600 text-amber-400'
                               : 'bg-yellow-900/30 border border-yellow-600 text-yellow-400'
                           }`}>
-                            {order.status || 'Unknown'}
+                            {normalizeOrderStatus(order.status) || 'Unknown'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">
@@ -543,7 +626,7 @@ const AdminDashboard = () => {
                         <div className="relative group">
                           <div className="aspect-[4/3] rounded-2xl overflow-hidden border-2 border-primary-500/20 shadow-xl">
                             <img
-                              src={selectedProduct.images[0].startsWith('http') ? selectedProduct.images[0] : `http://localhost:5000${selectedProduct.images[0]}`}
+                              src={resolveImageUrl(selectedProduct.images[0])}
                               alt={selectedProduct.name}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                               onError={(e) => {
@@ -569,7 +652,7 @@ const AdminDashboard = () => {
                             {selectedProduct.images.slice(1).map((image, index) => (
                               <div key={index} className="aspect-square rounded-lg overflow-hidden border border-surface-light hover:border-primary-500 transition-all duration-300 cursor-pointer group">
                                 <img
-                                  src={image.startsWith('http') ? image : `http://localhost:5000${image}`}
+                                  src={resolveImageUrl(image)}
                                   alt={`${selectedProduct.name} - ${index + 2}`}
                                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                   onError={(e) => {
@@ -605,6 +688,19 @@ const AdminDashboard = () => {
                           <h3 className="text-lg font-semibold text-red-400">Rejection Reason</h3>
                         </div>
                         <p className="text-red-300">{selectedProduct.rejectionReason}</p>
+                      </div>
+                    )}
+
+                    {/* AI Flagged Notice (Pending products with AI reason) */}
+                    {selectedProduct.approvalStatus === 'Pending' && selectedProduct.aiDecision === 'pending_review' && selectedProduct.aiReason && (
+                      <div className="bg-blue-900/10 border-2 border-blue-600/30 rounded-xl p-6">
+                        <div className="flex items-center gap-2 mb-3">
+                          <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <h3 className="text-lg font-semibold text-blue-400">AI Flagged for Review</h3>
+                        </div>
+                        <p className="text-blue-300">{selectedProduct.aiReason}</p>
                       </div>
                     )}
                   </div>
@@ -677,6 +773,104 @@ const AdminDashboard = () => {
                       </div>
                     </div>
 
+                    {/* AI Review Panel */}
+                    {selectedProduct.aiReviewed && (() => {
+                      const score     = selectedProduct.aiConfidenceScore ?? 0;
+                      const dec       = selectedProduct.aiDecision;
+                      const isApprove = dec === 'auto_approved';
+                      const isReject  = dec === 'auto_rejected';
+
+                      // Static Tailwind class sets — no dynamic interpolation
+                      const panelCls  = isApprove
+                        ? 'bg-emerald-900/10 border-emerald-600/30'
+                        : isReject
+                        ? 'bg-red-900/10 border-red-600/30'
+                        : 'bg-blue-900/10 border-blue-600/30';
+                      const headerCls = isApprove
+                        ? 'border-emerald-600/20 bg-emerald-900/20'
+                        : isReject
+                        ? 'border-red-600/20 bg-red-900/20'
+                        : 'border-blue-600/20 bg-blue-900/20';
+                      const titleCls  = isApprove ? 'text-emerald-400' : isReject ? 'text-red-400' : 'text-blue-400';
+                      const badgeCls  = isApprove
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : isReject
+                        ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                        : 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+                      const scoreColor = score >= 90 ? 'text-emerald-400' : score < 60 ? 'text-red-400' : 'text-blue-400';
+                      const barColor   = score >= 90 ? 'bg-emerald-500' : score < 60 ? 'bg-red-500' : 'bg-blue-400';
+                      const label      = isApprove ? '✓ Auto Approved' : isReject ? '✗ Auto Rejected' : '⚑ Flagged for Review';
+                      const phraseLayer   = score >= 90 ? 'Strong match' : score < 60 ? 'Weak / off-domain' : 'Partial match';
+                      const semanticLayer = score >= 90 ? 'High similarity' : score < 60 ? 'Low similarity' : 'Moderate similarity';
+
+                      return (
+                        <div className={`rounded-xl border-2 overflow-hidden ${panelCls}`}>
+                          {/* Header row */}
+                          <div className={`flex items-center justify-between px-5 py-3 border-b ${headerCls}`}>
+                            <span className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 ${titleCls}`}>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                              AI Classification
+                            </span>
+                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${badgeCls}`}>
+                              {label}
+                            </span>
+                          </div>
+
+                          <div className="px-5 py-4 space-y-4">
+                            {/* Confidence score bar */}
+                            <div>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-[11px] font-medium text-text-secondary uppercase tracking-wide">Confidence Score</span>
+                                <span className={`text-sm font-bold tabular-nums ${scoreColor}`}>{score}/100</span>
+                              </div>
+                              <div className="w-full bg-surface rounded-full h-2 overflow-hidden">
+                                <div className={`h-2 rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${score}%` }} />
+                              </div>
+                              <div className="flex justify-between mt-1">
+                                <span className="text-[10px] text-text-tertiary">Reject &lt;60</span>
+                                <span className="text-[10px] text-text-tertiary">Pending 60–89</span>
+                                <span className="text-[10px] text-text-tertiary">Approve ≥90</span>
+                              </div>
+                            </div>
+
+                            {/* Layer breakdown */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-surface rounded-lg px-3 py-2">
+                                <p className="text-[10px] text-text-tertiary uppercase tracking-wide mb-0.5">Hard Rules</p>
+                                <p className="text-xs font-semibold text-text-primary">Passed</p>
+                              </div>
+                              <div className="bg-surface rounded-lg px-3 py-2">
+                                <p className="text-[10px] text-text-tertiary uppercase tracking-wide mb-0.5">Phrase Engine</p>
+                                <p className="text-xs font-semibold text-text-primary">{phraseLayer}</p>
+                              </div>
+                              <div className="bg-surface rounded-lg px-3 py-2 col-span-2">
+                                <p className="text-[10px] text-text-tertiary uppercase tracking-wide mb-0.5">TF-IDF Semantic Similarity</p>
+                                <p className="text-xs font-semibold text-text-primary">{semanticLayer}</p>
+                              </div>
+                            </div>
+
+                            {/* AI Reason — technical detail for admin only */}
+                            {selectedProduct.aiReason && (
+                              <div className="bg-surface rounded-lg px-3 py-2.5">
+                                <p className="text-[10px] text-text-tertiary uppercase tracking-wide mb-1">AI Reasoning (Admin Only)</p>
+                                <p className="text-xs text-text-secondary leading-relaxed">{selectedProduct.aiReason}</p>
+                              </div>
+                            )}
+
+                            {/* Feedback loop indicator */}
+                            <p className="text-[10px] text-text-tertiary flex items-center gap-1.5 pt-1 border-t border-surface-light">
+                              <svg className="w-3 h-3 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Your decision is logged for AI model improvement. You can override any time.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Vendor Details */}
                     <div className="bg-surface-light border border-surface-light rounded-xl p-6">
                       <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
@@ -712,9 +906,13 @@ const AdminDashboard = () => {
                               <button
                                 onClick={() => {
                                   handleApproveProduct(selectedProduct._id, 'approve');
-                                  handleCloseModal();
                                 }}
-                                className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                                disabled={productActionLoading}
+                                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+                                  productActionLoading
+                                    ? 'bg-green-600/60 text-white/70 cursor-not-allowed'
+                                    : 'bg-green-600 hover:bg-green-700 text-white'
+                                }`}
                                 title="Approve product"
                               >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -726,7 +924,12 @@ const AdminDashboard = () => {
                                 onClick={() => {
                                   handleApproveProduct(selectedProduct._id, 'reject');
                                 }}
-                                className="flex-1 px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                                disabled={productActionLoading}
+                                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+                                  productActionLoading
+                                    ? 'bg-yellow-600/60 text-white/70 cursor-not-allowed'
+                                    : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                                }`}
                                 title="Reject product"
                               >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -741,7 +944,12 @@ const AdminDashboard = () => {
                               onClick={() => {
                                 handleApproveProduct(selectedProduct._id, 'reject');
                               }}
-                              className="flex-1 px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                              disabled={productActionLoading}
+                              className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+                                productActionLoading
+                                  ? 'bg-yellow-600/60 text-white/70 cursor-not-allowed'
+                                  : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                              }`}
                               title="Reject product"
                             >
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -754,9 +962,13 @@ const AdminDashboard = () => {
                             <button
                               onClick={() => {
                                 handleApproveProduct(selectedProduct._id, 'approve');
-                                handleCloseModal();
                               }}
-                              className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                              disabled={productActionLoading}
+                              className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+                                productActionLoading
+                                  ? 'bg-green-600/60 text-white/70 cursor-not-allowed'
+                                  : 'bg-green-600 hover:bg-green-700 text-white'
+                              }`}
                               title="Approve product"
                             >
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -767,7 +979,12 @@ const AdminDashboard = () => {
                           )}
                           <button
                             onClick={() => handleDeleteProduct(selectedProduct._id)}
-                            className="px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                            disabled={productActionLoading}
+                            className={`px-4 py-3 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+                              productActionLoading
+                                ? 'bg-red-600/60 text-white/70 cursor-not-allowed'
+                                : 'bg-red-600 hover:bg-red-700 text-white'
+                            }`}
                             title="Delete product"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

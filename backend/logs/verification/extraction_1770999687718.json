@@ -1,0 +1,77 @@
+{
+  "sessionId": "1770999687718",
+  "timestamp": "2026-02-13T16:21:27.718Z",
+  "stages": [
+    {
+      "stage": "init",
+      "timestamp": "2026-02-13T16:21:27.720Z",
+      "imagePath": "uploads\\verification\\69750c8546b348efc92afed4-cnicFront.jpeg"
+    },
+    {
+      "stage": "preprocess",
+      "timestamp": "2026-02-13T16:21:28.572Z",
+      "success": true,
+      "variants": [
+        "normalized_sharp",
+        "high_contrast",
+        "bright_normalized",
+        "very_high_contrast"
+      ]
+    },
+    {
+      "stage": "extraction",
+      "timestamp": "2026-02-13T16:21:42.967Z",
+      "resultsCount": 7,
+      "results": [
+        {
+          "name": "EE ABDUL HANNAN",
+          "confidence": 62,
+          "method": "full",
+          "variant": "normalized_sharp"
+        },
+        {
+          "name": "ABDUL HANNAN",
+          "confidence": 51,
+          "method": "region",
+          "variant": "high_contrast"
+        },
+        {
+          "name": "ER ABDUL HANNAN",
+          "confidence": 62,
+          "method": "full",
+          "variant": "high_contrast"
+        },
+        {
+          "name": "CO DM SOD RE A A A II",
+          "confidence": 39,
+          "method": "region",
+          "variant": "bright_normalized"
+        },
+        {
+          "name": "ABDUL HANNAN",
+          "confidence": 70,
+          "method": "full",
+          "variant": "bright_normalized"
+        },
+        {
+          "name": "ABDUL HANNAN",
+          "confidence": 30,
+          "method": "region",
+          "variant": "very_high_contrast"
+        },
+        {
+          "name": "PTE ABDUL HANNAN",
+          "confidence": 58,
+          "method": "full",
+          "variant": "very_high_contrast"
+        }
+      ]
+    }
+  ],
+  "finalResult": {
+    "success": true,
+    "name": "ABDUL HANNAN",
+    "confidence": 70,
+    "method": "full"
+  }
+}

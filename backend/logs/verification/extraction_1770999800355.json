@@ -1,0 +1,70 @@
+{
+  "sessionId": "1770999800355",
+  "timestamp": "2026-02-13T16:23:20.355Z",
+  "stages": [
+    {
+      "stage": "init",
+      "timestamp": "2026-02-13T16:23:20.356Z",
+      "imagePath": "uploads\\verification\\69750c8546b348efc92afed4-cnicFront.jpeg"
+    },
+    {
+      "stage": "preprocess",
+      "timestamp": "2026-02-13T16:23:21.159Z",
+      "success": true,
+      "variants": [
+        "normalized_sharp",
+        "high_contrast",
+        "bright_normalized",
+        "very_high_contrast"
+      ]
+    },
+    {
+      "stage": "extraction",
+      "timestamp": "2026-02-13T16:23:41.729Z",
+      "resultsCount": 6,
+      "results": [
+        {
+          "name": "ERNE SAIF ULLAH I FEE EN",
+          "confidence": 29,
+          "method": "full",
+          "variant": "normalized_sharp"
+        },
+        {
+          "name": "AIF ULLAH",
+          "confidence": 69,
+          "method": "region",
+          "variant": "high_contrast"
+        },
+        {
+          "name": "ET SAIF ULLAH",
+          "confidence": 58,
+          "method": "full",
+          "variant": "high_contrast"
+        },
+        {
+          "name": "AS GHULAM HUSSAIN SOUTE",
+          "confidence": 40,
+          "method": "full",
+          "variant": "bright_normalized"
+        },
+        {
+          "name": "AIF ULLAH",
+          "confidence": 41,
+          "method": "region",
+          "variant": "very_high_contrast"
+        },
+        {
+          "name": "BR SAIF ULLAH",
+          "confidence": 56,
+          "method": "full",
+          "variant": "very_high_contrast"
+        }
+      ]
+    }
+  ],
+  "finalResult": {
+    "success": false,
+    "error": "Confidence too low (69%)",
+    "bestCandidate": "AIF ULLAH"
+  }
+}

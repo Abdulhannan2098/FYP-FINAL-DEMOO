@@ -85,7 +85,7 @@ const ResetPasswordScreen = ({ navigation, route }) => {
       setLoading(true);
       setErrors({});
 
-      const response = await apiClient.post(`/auth/reset-password/${resetToken}`, {
+      const response = await apiClient.put(`/auth/reset-password/${resetToken}`, {
         password: newPassword,
       });
 

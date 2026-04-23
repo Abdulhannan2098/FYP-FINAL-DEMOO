@@ -17,6 +17,7 @@ import OrderStatusTimeline from '../../components/OrderStatusTimeline';
 import OrderItemCard from '../../components/OrderItemCard';
 import Button from '../../components/Button';
 import Loading from '../../components/Loading';
+import { getDisplayOrderNumber } from '../../utils/orderNumber';
 import { useChat } from '../../context/ChatContext';
 import theme from '../../styles/theme';
 import apiClient from '../../api/client';
@@ -37,6 +38,20 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
 
   const renderOrderItem = ({ item }) => <OrderItemCard item={item} />;
 
+  const normalizeOrderStatus = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+
+    if (normalized === 'accepted') return 'In Progress';
+    if (normalized === 'rejected' || normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+    if (normalized === 'completed') return 'Delivered';
+    if (normalized === 'pending') return 'Pending Vendor Action';
+    if (normalized === 'in progress') return 'In Progress';
+    if (normalized === 'shipped') return 'Shipped';
+    if (normalized === 'delivered') return 'Delivered';
+
+    return value;
+  };
+
   useEffect(() => {
     fetchOrderDetails();
   }, [orderId]);
@@ -48,7 +63,7 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
 
       if (response.data.success) {
         setOrder(response.data.data);
-        setNewStatus(response.data.data.status);
+        setNewStatus(normalizeOrderStatus(response.data.data.status) || 'In Progress');
       }
     } catch (err) {
       console.error('Fetch order error:', err);
@@ -106,23 +121,25 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
 
   const handleAcceptOrder = async () => {
     Alert.alert(
-      'Accept Order',
-      'Do you want to accept this order?',
+      'Start Processing',
+      'Move this order into In Progress?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Accept',
+          text: 'Update',
           onPress: async () => {
             try {
               setActionLoading(true);
-              const response = await apiClient.post(`/orders/${orderId}/accept`);
+              const response = await apiClient.put(`/orders/${orderId}/status`, {
+                status: 'In Progress',
+              });
 
               if (response.data.success) {
-                Alert.alert('Success', 'Order accepted successfully');
+                Alert.alert('Success', 'Order updated successfully');
                 fetchOrderDetails();
               }
             } catch (err) {
-              Alert.alert('Error', 'Failed to accept order');
+              Alert.alert('Error', 'Failed to update order');
             } finally {
               setActionLoading(false);
             }
@@ -133,32 +150,31 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
   };
 
   const handleRejectOrder = async () => {
-    if (!rejectReason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for rejection');
-      return;
-    }
-
     try {
       setActionLoading(true);
-      const response = await apiClient.post(`/orders/${orderId}/reject`, {
-        reason: rejectReason,
+      const response = await apiClient.put(`/orders/${orderId}/status`, {
+        status: 'Cancelled',
+        note: rejectReason,
+        rejectionReason: rejectReason,
       });
 
       if (response.data.success) {
-        Alert.alert('Success', 'Order rejected');
+        Alert.alert('Success', 'Order cancelled');
         setShowRejectModal(false);
         setRejectReason('');
         fetchOrderDetails();
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to reject order');
+      Alert.alert('Error', 'Failed to cancel order');
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleUpdateStatus = async () => {
-    if (newStatus === order.status) {
+    const currentStatus = normalizeOrderStatus(order.status);
+
+    if (newStatus === currentStatus) {
       setShowStatusModal(false);
       return;
     }
@@ -200,18 +216,20 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
   };
 
   const getAvailableStatuses = () => {
-    const currentStatus = order?.status;
+    const currentStatus = normalizeOrderStatus(order?.status);
     const statuses = [
-      { value: 'pending', label: 'Pending' },
-      { value: 'accepted', label: 'Accepted' },
-      { value: 'in_progress', label: 'In Progress' },
-      { value: 'shipped', label: 'Shipped' },
-      { value: 'completed', label: 'Completed' },
+      { value: 'In Progress', label: 'In Progress' },
+      { value: 'Shipped', label: 'Shipped' },
+      { value: 'Delivered', label: 'Delivered' },
+      { value: 'Cancelled', label: 'Cancelled' },
     ];
 
-    // Filter based on current status to prevent backward movement
+    if (currentStatus === 'Pending Vendor Action') {
+      return statuses;
+    }
+
     const currentIndex = statuses.findIndex((s) => s.value === currentStatus);
-    return statuses.slice(currentIndex);
+    return currentIndex >= 0 ? statuses.slice(currentIndex) : statuses;
   };
 
   if (loading) {
@@ -238,7 +256,7 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Order #{order.orderNumber}</Text>
+        <Text style={styles.headerTitle}>Order #{getDisplayOrderNumber(order)}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -257,27 +275,19 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
         />
 
         {/* Vendor Actions */}
-        {order.status === 'pending' && (
+        {normalizeOrderStatus(order.status) === 'Pending Vendor Action' && (
           <View style={styles.actionSection}>
             <Button
-              title="Accept Order"
-              onPress={handleAcceptOrder}
+              title="Update Status"
+              onPress={() => setShowStatusModal(true)}
               disabled={actionLoading}
               style={styles.acceptButton}
-            />
-            <Button
-              title="Reject Order"
-              onPress={() => setShowRejectModal(true)}
-              variant="outline"
-              disabled={actionLoading}
-              style={styles.rejectButton}
             />
           </View>
         )}
 
-        {(order.status === 'accepted' ||
-          order.status === 'in_progress' ||
-          order.status === 'shipped') && (
+        {(normalizeOrderStatus(order.status) === 'In Progress' ||
+          normalizeOrderStatus(order.status) === 'Shipped') && (
           <View style={styles.actionSection}>
             <Button
               title="Update Status"
@@ -294,7 +304,7 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
           <View style={styles.card}>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Order Number:</Text>
-              <Text style={styles.infoValue}>{order.orderNumber}</Text>
+              <Text style={styles.infoValue}>{getDisplayOrderNumber(order)}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Order Date:</Text>
@@ -384,6 +394,9 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Update Order Status</Text>
+            <Text style={styles.modalSubtitle}>
+              Current status: {normalizeOrderStatus(order.status)}
+            </Text>
 
             <View style={styles.statusOptions}>
               {getAvailableStatuses().map((status) => (
@@ -422,51 +435,6 @@ const VendorOrderDetailScreen = ({ navigation, route }) => {
                 onPress={handleUpdateStatus}
                 disabled={actionLoading}
                 style={styles.modalButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Reject Order Modal */}
-      <Modal
-        visible={showRejectModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowRejectModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Reject Order</Text>
-            <Text style={styles.modalSubtitle}>
-              Please provide a reason for rejecting this order:
-            </Text>
-
-            <TextInput
-              style={styles.textArea}
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              placeholder="Enter reason..."
-              placeholderTextColor={theme.colors.text.tertiary}
-              multiline
-              numberOfLines={4}
-            />
-
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                onPress={() => {
-                  setShowRejectModal(false);
-                  setRejectReason('');
-                }}
-                variant="secondary"
-                style={styles.modalButton}
-              />
-              <Button
-                title="Reject Order"
-                onPress={handleRejectOrder}
-                disabled={actionLoading || !rejectReason.trim()}
-                style={[styles.modalButton, styles.rejectButtonModal]}
               />
             </View>
           </View>

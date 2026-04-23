@@ -1,7 +1,33 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const mongoose = require('mongoose');
-const { sendOrderConfirmationEmail, sendOrderStatusUpdateEmail } = require('../utils/emailService');
+const {
+  sendOrderConfirmationEmail,
+  sendOrderStatusUpdateEmail,
+  sendVendorNewOrderEmail,
+} = require('../utils/emailService');
+
+const normalizeOrderStatus = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
+
+  if (normalized === 'accepted') return 'In Progress';
+  if (normalized === 'rejected') return 'Cancelled';
+  if (normalized === 'completed') return 'Delivered';
+  if (normalized === 'pending') return 'Pending Vendor Action';
+
+  if (normalized === 'in progress') return 'In Progress';
+  if (normalized === 'shipped') return 'Shipped';
+  if (normalized === 'delivered') return 'Delivered';
+  if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+  if (normalized === 'pending vendor action') return 'Pending Vendor Action';
+
+  return status;
+};
+
+const getCanonicalOrderId = (order) => {
+  if (!order) return '';
+  return String(order.orderId || order.orderNumber || order._id || '');
+};
 
 // @desc    Create a new order (supports multi-vendor)
 // @route   POST /api/orders
@@ -175,14 +201,37 @@ exports.createOrder = async (req, res, next) => {
     }
 
     // Send order confirmation email (non-blocking)
+    const orderReferences = createdOrders
+      .map((order) => getCanonicalOrderId(order))
+      .filter(Boolean)
+      .join(', ');
+
     sendOrderConfirmationEmail(
       req.user.email,
       req.user.name,
-      checkoutSessionId.slice(-8).toUpperCase(),
+      orderReferences || checkoutSessionId,
       emailItems,
       grandTotal,
       createdOrders.length
     ).catch(err => console.error('Failed to send order confirmation email:', err.message));
+
+    // Notify each vendor about new incoming order (non-blocking)
+    createdOrders.forEach((order) => {
+      if (!order?.vendor?.email) return;
+
+      const vendorItems = (order.items || []).map((item) => ({
+        name: item?.product?.name || 'Item',
+        quantity: Number(item?.quantity) || 0,
+      }));
+
+      sendVendorNewOrderEmail(
+        order.vendor.email,
+        order.vendor.name || 'Vendor',
+        getCanonicalOrderId(order),
+        vendorItems,
+        order.totalAmount
+      ).catch((err) => console.error('Failed to send vendor new-order email:', err.message));
+    });
 
     // Prepare response
     const response = {
@@ -347,16 +396,10 @@ exports.updateOrderStatus = async (req, res, next) => {
   try {
     const { status, rejectionReason, note } = req.body;
 
-    const validStatuses = [
-      'Accepted',
-      'Rejected',
-      'In Progress',
-      'Shipped',
-      'Completed',
-      'Cancelled',
-    ];
+    const normalizedStatus = normalizeOrderStatus(status);
+    const validStatuses = ['In Progress', 'Shipped', 'Delivered', 'Cancelled'];
 
-    if (!validStatuses.includes(status)) {
+    if (!validStatuses.includes(normalizedStatus)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid status value',
@@ -388,25 +431,17 @@ exports.updateOrderStatus = async (req, res, next) => {
       });
     }
 
-    // If rejecting, require a reason
-    if (status === 'Rejected' && !rejectionReason) {
-      return res.status(400).json({
-        success: false,
-        message: 'Rejection reason is required when rejecting an order',
-      });
-    }
-
     // Update status
-    order.status = status;
-    if (status === 'Rejected') {
+    order.status = normalizedStatus;
+    if (normalizedStatus === 'Cancelled' && rejectionReason) {
       order.vendorRejectionReason = rejectionReason;
     }
 
     order.statusHistory.push({
-      status,
+      status: normalizedStatus,
       timestamp: new Date(),
       updatedBy: req.user.id,
-      note: note || (status === 'Rejected' ? rejectionReason : ''),
+      note: note || rejectionReason || '',
     });
 
     await order.save();
@@ -418,11 +453,19 @@ exports.updateOrderStatus = async (req, res, next) => {
 
     // Send order status update email (non-blocking)
     if (updatedOrder.customer && updatedOrder.customer.email) {
+      if (normalizedStatus === 'Pending Vendor Action') {
+        return res.status(200).json({
+          success: true,
+          message: 'Order status updated successfully',
+          data: updatedOrder,
+        });
+      }
+
       sendOrderStatusUpdateEmail(
         updatedOrder.customer.email,
         updatedOrder.customer.name,
-        updatedOrder.orderNumber || updatedOrder._id.toString().slice(-12).toUpperCase(),
-        status,
+        getCanonicalOrderId(updatedOrder),
+        normalizedStatus,
         updatedOrder.vendor?.name || 'Vendor'
       ).catch(err => console.error('Failed to send order status email:', err.message));
     }
@@ -468,7 +511,7 @@ exports.bulkDeleteOrders = async (req, res, next) => {
       });
     }
 
-    const allowedStatuses = new Set(['Shipped', 'Completed']);
+    const allowedStatuses = new Set(['Shipped', 'Delivered']);
 
     const orders = await Order.find({ _id: { $in: uniqueIds } })
       .select('_id status')
@@ -492,7 +535,7 @@ exports.bulkDeleteOrders = async (req, res, next) => {
     if (nonDeletable.length > 0) {
       return res.status(400).json({
         success: false,
-        message: 'Only Shipped/Completed orders can be deleted',
+        message: 'Only Shipped/Delivered orders can be deleted',
         nonDeletable,
       });
     }

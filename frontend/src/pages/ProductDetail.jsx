@@ -13,6 +13,7 @@ import { AccurateARViewer } from '../ar';
 // import AdvancedARViewer from '../components/ar/AdvancedARViewer';
 import { getPlaceholderImage } from '../utils/constants';
 import { formatPKR } from '../utils/currency';
+import { resolveImageUrl } from '../utils/imageHelper';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -154,7 +155,7 @@ const ProductDetail = () => {
               <div className="relative w-full h-96 bg-surface-light rounded-xl overflow-hidden group">
                 {product.images && product.images.length > 0 ? (
                   <img
-                    src={product.images[0].startsWith('http') ? product.images[0] : `http://localhost:5000${product.images[0]}`}
+                    src={resolveImageUrl(product.images[0])}
                     alt={product.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     onError={(e) => {
@@ -182,7 +183,7 @@ const ProductDetail = () => {
                   {product.images.slice(1, 5).map((image, index) => (
                     <div key={index} className="aspect-square rounded-lg overflow-hidden border border-surface-light hover:border-primary-500 transition-all cursor-pointer">
                       <img
-                        src={image.startsWith('http') ? image : `http://localhost:5000${image}`}
+                        src={resolveImageUrl(image)}
                         alt={`${product.name} - ${index + 2}`}
                         className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
                         onError={(e) => {

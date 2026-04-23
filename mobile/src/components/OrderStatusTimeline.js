@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import theme from '../styles/theme';
@@ -13,13 +13,12 @@ const OrderStatusTimeline = ({ currentStatus, createdAt, statusHistory = [] }) =
       s === 'cancelled' ||
       s === 'canceled' ||
       s === 'cancelled by customer' ||
-      s === 'canceled by customer'
+      s === 'canceled by customer' ||
+      s === 'rejected' ||
+      s === 'declined' ||
+      s === 'rejected by vendor'
     ) {
       return 'cancelled';
-    }
-
-    if (s === 'rejected' || s === 'declined' || s === 'rejected by vendor') {
-      return 'rejected';
     }
 
     if (
@@ -32,11 +31,14 @@ const OrderStatusTimeline = ({ currentStatus, createdAt, statusHistory = [] }) =
       return 'pending';
     }
 
-    if (s === 'accepted' || s === 'confirmed' || s === 'approved') {
-      return 'accepted';
-    }
-
-    if (s === 'in progress' || s === 'in_progress' || s === 'processing') {
+    if (
+      s === 'accepted' ||
+      s === 'confirmed' ||
+      s === 'approved' ||
+      s === 'in progress' ||
+      s === 'in_progress' ||
+      s === 'processing'
+    ) {
       return 'in_progress';
     }
 
@@ -45,34 +47,27 @@ const OrderStatusTimeline = ({ currentStatus, createdAt, statusHistory = [] }) =
     }
 
     if (s === 'completed' || s === 'delivered') {
-      return 'completed';
+      return 'delivered';
     }
 
     return '';
   };
 
-  // Define the order status flow
   const statusFlow = [
-    { key: 'pending', label: 'Pending', icon: 'time-outline' },
-    { key: 'accepted', label: 'Accepted', icon: 'checkmark-circle-outline' },
+    { key: 'pending', label: 'Pending Vendor Action', icon: 'time-outline' },
     { key: 'in_progress', label: 'In Progress', icon: 'construct-outline' },
     { key: 'shipped', label: 'Shipped', icon: 'airplane-outline' },
-    { key: 'completed', label: 'Completed', icon: 'checkmark-done-circle-outline' },
+    { key: 'delivered', label: 'Delivered', icon: 'checkmark-done-circle-outline' },
   ];
 
-  // Handle cancelled and rejected status separately
   const normalizedKey = normalizeToFlowKey(currentStatus);
-  if (normalizedKey === 'cancelled' || normalizedKey === 'rejected') {
+  if (normalizedKey === 'cancelled') {
     return (
       <View style={styles.container}>
         <View style={styles.cancelledContainer}>
           <Ionicons name="close-circle" size={48} color={theme.colors.error} />
-          <Text style={styles.cancelledTitle}>
-            {normalizedKey === 'cancelled' ? 'Order Cancelled' : 'Order Rejected'}
-          </Text>
-          <Text style={styles.cancelledText}>
-            This order was {normalizedKey} by the {normalizedKey === 'cancelled' ? 'customer' : 'vendor'}
-          </Text>
+          <Text style={styles.cancelledTitle}>Order Cancelled</Text>
+          <Text style={styles.cancelledText}>This order was cancelled and is no longer active.</Text>
         </View>
       </View>
     );
@@ -102,12 +97,10 @@ const OrderStatusTimeline = ({ currentStatus, createdAt, statusHistory = [] }) =
           const isCurrent = index === currentIndex;
           const isPending = index > currentIndex;
           const ts = isCompleted ? getTimestampForKey(status.key) : null;
-          const nextLabel =
-            isCurrent && index + 1 < statusFlow.length ? statusFlow[index + 1].label : null;
+          const nextLabel = isCurrent && index + 1 < statusFlow.length ? statusFlow[index + 1].label : null;
 
           return (
             <View key={status.key} style={styles.timelineItem}>
-              {/* Connector Line (except for first item) */}
               {index > 0 && (
                 <View
                   style={[
@@ -118,7 +111,6 @@ const OrderStatusTimeline = ({ currentStatus, createdAt, statusHistory = [] }) =
                 />
               )}
 
-              {/* Status Icon */}
               <View style={styles.iconWrap}>
                 {isCurrent ? <View style={styles.currentHalo} /> : null}
                 <View
@@ -137,12 +129,9 @@ const OrderStatusTimeline = ({ currentStatus, createdAt, statusHistory = [] }) =
                 </View>
               </View>
 
-              {/* Status Label */}
               <View style={styles.labelContainer}>
                 <View style={styles.labelRow}>
-                  <Text
-                    style={[styles.label, (isCompleted || isCurrent) && styles.labelActive]}
-                  >
+                  <Text style={[styles.label, (isCompleted || isCurrent) && styles.labelActive]}>
                     {status.label}
                   </Text>
                   {isCurrent ? (
@@ -152,13 +141,8 @@ const OrderStatusTimeline = ({ currentStatus, createdAt, statusHistory = [] }) =
                   ) : null}
                 </View>
 
-                {/* Show timestamp if available */}
-                {isCurrent && nextLabel ? (
-                  <Text style={styles.timestamp}>Next: {nextLabel}</Text>
-                ) : null}
-                {ts ? (
-                  <Text style={styles.timestamp}>Updated: {new Date(ts).toLocaleDateString()}</Text>
-                ) : null}
+                {isCurrent && nextLabel ? <Text style={styles.timestamp}>Next: {nextLabel}</Text> : null}
+                {ts ? <Text style={styles.timestamp}>Updated: {new Date(ts).toLocaleDateString()}</Text> : null}
               </View>
             </View>
           );
@@ -280,7 +264,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text.tertiary,
     marginTop: theme.spacing.xs,
   },
-  // Cancelled/Rejected styles
   cancelledContainer: {
     alignItems: 'center',
     paddingVertical: theme.spacing.xl,

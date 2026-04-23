@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from './config';
-import { getToken, clearToken } from '../utils/storage';
+import { getToken, clearToken, getUser } from '../utils/storage';
 
 // Global logout handler to be set by AuthContext
 let globalLogoutHandler = null;
@@ -25,6 +25,14 @@ apiClient.interceptors.request.use(
       const token = await getToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      // Mobile-only testing bypass for the seeded vendor user.
+      // This header is used by the backend to unlock vendor-only routes during testing.
+      const user = await getUser();
+      const normalizedEmail = (user?.email ?? '').toString().trim().toLowerCase();
+      if (normalizedEmail === 'ali.hammad@autosphere.pk') {
+        config.headers['X-Mobile-Test-Login'] = 'true';
       }
     } catch (error) {
       console.error('Error getting token:', error);

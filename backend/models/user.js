@@ -79,12 +79,72 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxlength: [100, 'Business name cannot exceed 100 characters'],
     },
+    businessType: {
+      type: String,
+      enum: ['sole_proprietor', 'partnership', 'private_limited', 'retailer', 'wholesaler', 'manufacturer'],
+    },
+    businessRegistrationNumber: {
+      type: String,
+      trim: true,
+    },
+    yearsInBusiness: {
+      type: String,
+      enum: ['new', '1-3', '3-5', '5-10', '10+', ''],
+    },
+    hasPhysicalStore: {
+      type: Boolean,
+      default: false,
+    },
+    cnicNumber: {
+      type: String,
+      trim: true,
+      sparse: true, // Allow multiple null values
+    },
     businessAddress: {
       street: String,
       city: String,
       state: String,
       zipCode: String,
       country: String,
+    },
+    // Vendor verification status
+    vendorStatus: {
+      type: String,
+      enum: ['unverified', 'pending_verification', 'verified', 'rejected'],
+      default: 'unverified',
+    },
+    // Category of accessories sold by vendor
+    accessoryCategory: {
+      type: String,
+      enum: ['Interior', 'Exterior', 'Performance', 'Lighting', 'Audio & Electronics', 'Safety & Security', 'Wheels & Tires', 'Body Parts', 'Engine Parts', 'Maintenance & Care', 'Multiple Categories', 'Other'],
+    },
+    // Phone verification fields
+    phoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    phoneVerificationOTP: {
+      type: String,
+      select: false,
+    },
+    phoneVerificationExpire: {
+      type: Date,
+      select: false,
+    },
+    // Vendor verification documents and data
+    vendorVerification: {
+      cnicFront: String,
+      cnicBack: String,
+      cnicNumber: String,
+      cnicName: String,
+      nameMatchScore: Number,
+      verificationDate: Date,
+      rejectionReason: String,
+      verificationAttempts: {
+        type: Number,
+        default: 0,
+      },
+      lastAttemptDate: Date,
     },
     isActive: {
       type: Boolean,
@@ -169,6 +229,25 @@ userSchema.methods.getEmailVerificationOTP = function () {
 
   // Set expire time (10 minutes for OTP)
   this.emailVerificationExpire = Date.now() + 10 * 60 * 1000;
+
+  return otp;
+};
+
+// Generate phone verification OTP (6-digit)
+userSchema.methods.getPhoneVerificationOTP = function () {
+  const crypto = require('crypto');
+
+  // Generate 6-digit OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Hash OTP and set to phoneVerificationOTP field
+  this.phoneVerificationOTP = crypto
+    .createHash('sha256')
+    .update(otp)
+    .digest('hex');
+
+  // Set expire time (10 minutes for OTP)
+  this.phoneVerificationExpire = Date.now() + 10 * 60 * 1000;
 
   return otp;
 };

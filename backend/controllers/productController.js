@@ -1,7 +1,32 @@
 const Product = require('../models/Product');
+const AIFeedback = require('../models/AIFeedback');
+const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { sendVendorProductApprovedEmail, sendVendorProductRejectedEmail, sendVendorProductDeletedEmail } = require('../utils/emailService');
+const { validateProduct: aiValidateProduct } = require('../services/productAIValidator');
+
+// ── Duplicate submission guard ──────────────────────────────────────────────
+// In-memory set of "vendor:normalised-name" keys with a 15-second TTL.
+// This prevents double-clicks or rapid re-submits from creating duplicates.
+const _recentSubmissions = new Map(); // key → expiresAt (ms)
+const DEDUP_TTL_MS = 15_000;
+
+function isDuplicateSubmission(vendorId, productName) {
+  const key = `${vendorId}:${productName.trim().toLowerCase()}`;
+  const now = Date.now();
+
+  // Purge expired entries
+  for (const [k, exp] of _recentSubmissions) {
+    if (exp <= now) _recentSubmissions.delete(k);
+  }
+
+  if (_recentSubmissions.has(key)) return true;
+
+  _recentSubmissions.set(key, now + DEDUP_TTL_MS);
+  return false;
+}
 
 // Configure multer for product image uploads
 const productStorage = multer.diskStorage({
@@ -28,6 +53,53 @@ const imageFilter = (req, file, cb) => {
   } else {
     cb(new Error('Only image files (JPEG, JPG, PNG) are allowed!'));
   }
+};
+
+const normalizeModel3DValue = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+
+  const normalized = String(value).trim();
+  return normalized ? normalized : null;
+};
+
+const mergeModel3D = (currentModel = {}, updates = {}) => {
+  const nextModel = {
+    ...currentModel,
+  };
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'glbFile')) {
+    nextModel.glbFile = normalizeModel3DValue(updates.glbFile);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'usdzFile')) {
+    nextModel.usdzFile = normalizeModel3DValue(updates.usdzFile);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'thumbnailAR')) {
+    nextModel.thumbnailAR = normalizeModel3DValue(updates.thumbnailAR);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'fileSize')) {
+    nextModel.fileSize = Number(updates.fileSize) || 0;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'dimensions')) {
+    const dimensions = updates.dimensions || {};
+    nextModel.dimensions = {
+      length: Number(dimensions.length) || 0,
+      width: Number(dimensions.width) || 0,
+      height: Number(dimensions.height) || 0,
+    };
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'uploadedAt')) {
+    nextModel.uploadedAt = updates.uploadedAt ? new Date(updates.uploadedAt) : nextModel.uploadedAt;
+  }
+
+  nextModel.isARReady = Boolean(nextModel.glbFile);
+
+  return nextModel;
 };
 
 exports.uploadProductImages = multer({
@@ -63,6 +135,18 @@ exports.createProduct = async (req, res, next) => {
       });
     }
 
+    // ── Duplicate submission guard ──────────────────────────────────────────
+    if (isDuplicateSubmission(req.user.id, name)) {
+      // Clean up any uploaded files before returning
+      if (req.files && req.files.length > 0) {
+        req.files.forEach(file => { try { fs.unlinkSync(file.path); } catch (_) {} });
+      }
+      return res.status(429).json({
+        success: false,
+        message: 'Duplicate submission detected. Your product was already received — please wait a moment before trying again.',
+      });
+    }
+
     // Handle images - either from file upload or URLs from body
     let imageUrls = [];
     
@@ -84,7 +168,36 @@ exports.createProduct = async (req, res, next) => {
       });
     }
 
-    // Create product with pending approval status
+    // ── AI Validation (3-layer hybrid engine) ───────────────────────────────
+    const aiResult = aiValidateProduct(name, description || '', category);
+    const {
+      decision:        aiDecision,
+      confidenceScore: aiConfidenceScore,
+      reason:          aiReason,       // technical — admin only
+      vendorMessage:   aiVendorMessage, // clean policy message — shown to vendor
+      layers:          aiLayers,
+    } = aiResult;
+
+    // Map AI decision to approval fields
+    let approvalStatus = 'Pending';
+    let isApproved = false;
+    // Store the clean vendor message as rejectionReason so vendor email + UI
+    // always display policy-friendly language (admin sees aiReason separately).
+    let rejectionReason = '';
+
+    if (aiDecision === 'auto_approved') {
+      approvalStatus = 'Approved';
+      isApproved = true;
+    } else if (aiDecision === 'auto_rejected') {
+      approvalStatus = 'Rejected';
+      isApproved = false;
+      rejectionReason = aiVendorMessage; // clean message stored for vendor
+    }
+    // pending_review → stays 'Pending'
+
+    console.log('AI Validation result:', { aiDecision, aiConfidenceScore, layers: aiLayers });
+
+    // Create product with AI-determined approval status
     const product = await Product.create({
       name,
       description,
@@ -92,22 +205,58 @@ exports.createProduct = async (req, res, next) => {
       category,
       stock,
       images: imageUrls,
-      vendor: req.user.id, // vendor from auth middleware
-      approvalStatus: 'Pending',
-      isApproved: false,
+      vendor: req.user.id,
+      approvalStatus,
+      isApproved,
+      rejectionReason,
+      aiReviewed: true,
+      aiDecision,
+      aiConfidenceScore,
+      aiReason,
     });
+
+    // Send email notifications for automated decisions
+    try {
+      const vendorUser = req.user;
+      if (aiDecision === 'auto_approved') {
+        await sendVendorProductApprovedEmail(
+          vendorUser.email,
+          vendorUser.name || 'Vendor',
+          product.name,
+          product._id
+        );
+      } else if (aiDecision === 'auto_rejected') {
+        await sendVendorProductRejectedEmail(
+          vendorUser.email,
+          vendorUser.name || 'Vendor',
+          product.name,
+          product._id,
+          aiReason
+        );
+      }
+    } catch (emailErr) {
+      console.error('AI decision email notification failed (non-blocking):', emailErr.message);
+    }
 
     console.log('Product created successfully:', {
       id: product._id,
       name: product.name,
       images: product.images,
-      vendor: product.vendor
+      vendor: product.vendor,
+      aiDecision,
+      approvalStatus,
     });
     console.log('=== BACKEND: Product Creation Complete ===');
 
+    const messageMap = {
+      auto_approved: 'Product submitted and automatically approved — it is now live!',
+      auto_rejected: 'Product submitted but could not be approved: ' + aiReason,
+      pending_review: 'Product submitted and flagged for manual admin review.',
+    };
+
     res.status(201).json({
       success: true,
-      message: 'Product created successfully and submitted for admin approval',
+      message: messageMap[aiDecision] || 'Product created successfully and submitted for admin approval',
       data: product,
     });
   } catch (error) {
@@ -137,6 +286,7 @@ exports.getAllProducts = async (req, res, next) => {
       maxPrice,
       minRating,
       vendor,
+      vendorId,
       inStock,
       page = 1,
       limit = 8,
@@ -171,9 +321,23 @@ exports.getAllProducts = async (req, res, next) => {
       filter.rating = { $gte: Number(minRating) };
     }
 
-    // Vendor filter
-    if (vendor) {
-      filter.vendor = vendor;
+    // Vendor filter (backward compatible: supports vendorId and legacy vendor)
+    const vendorFilter = vendorId || vendor;
+    if (vendorFilter) {
+      if (!mongoose.Types.ObjectId.isValid(vendorFilter)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid vendorId. Please provide a valid vendor identifier.',
+          errors: [
+            {
+              field: 'vendorId',
+              message: 'Must be a valid ObjectId',
+            },
+          ],
+        });
+      }
+
+      filter.vendor = vendorFilter;
     }
 
     // Stock filter
@@ -302,8 +466,18 @@ exports.updateProduct = async (req, res, next) => {
     }
 
     // Update fields
-    const fieldsToUpdate = req.body;
+    const fieldsToUpdate = { ...req.body };
+
+    if (fieldsToUpdate.model3D) {
+      product.model3D = mergeModel3D(product.model3D || {}, fieldsToUpdate.model3D);
+      delete fieldsToUpdate.model3D;
+    }
+
     Object.assign(product, fieldsToUpdate);
+
+    if (product.model3D) {
+      product.model3D.isARReady = Boolean(product.model3D.glbFile);
+    }
 
     await product.save();
 
@@ -322,7 +496,7 @@ exports.updateProduct = async (req, res, next) => {
 // @access  Private (Vendor/Admin)
 exports.deleteProduct = async (req, res, next) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findById(req.params.id).populate('vendor', 'name email');
 
     if (!product) {
       return res.status(404).json({
@@ -332,11 +506,38 @@ exports.deleteProduct = async (req, res, next) => {
     }
 
     // Authorization check
-    if (req.user.role !== 'admin' && product.vendor.toString() !== req.user.id) {
+    if (req.user.role !== 'admin' && product.vendor._id?.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this product',
       });
+    }
+
+    // Send deletion email notification when ADMIN deletes the product
+    if (req.user.role === 'admin') {
+      const vendorEmail = product.vendor?.email;
+
+      if (!vendorEmail) {
+        console.error('Product deleted by admin but vendor email is missing. Email notification skipped.', {
+          productId: product._id,
+          vendorId: product.vendor?._id,
+        });
+      } else {
+        const emailResult = await sendVendorProductDeletedEmail(
+          vendorEmail,
+          product.vendor?.name || 'Vendor',
+          product.name,
+          product._id
+        );
+
+        if (!emailResult?.success) {
+          console.error('Product deletion email failed to send.', {
+            productId: product._id,
+            vendorEmail,
+            error: emailResult?.error || 'Unknown email error',
+          });
+        }
+      }
     }
 
     // Clean up uploaded image files (only local uploads, not external URLs)
@@ -409,7 +610,7 @@ exports.getAllProductsAdmin = async (req, res, next) => {
 exports.approveProduct = async (req, res, next) => {
   try {
     const { action, rejectionReason } = req.body;
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findById(req.params.id).populate('vendor', 'name email');
 
     if (!product) {
       return res.status(404).json({
@@ -450,6 +651,79 @@ exports.approveProduct = async (req, res, next) => {
 
     await product.save();
 
+    if (action === 'approve') {
+      const vendorEmail = product.vendor?.email;
+
+      if (!vendorEmail) {
+        console.error('Product approved but vendor email is missing. Email notification skipped.', {
+          productId: product._id,
+          vendorId: product.vendor?._id || product.vendor,
+        });
+      } else {
+        const emailResult = await sendVendorProductApprovedEmail(
+          vendorEmail,
+          product.vendor?.name || 'Vendor',
+          product.name,
+          product._id
+        );
+
+        if (!emailResult?.success) {
+          console.error('Product approval email failed to send.', {
+            productId: product._id,
+            vendorEmail,
+            error: emailResult?.error || 'Unknown email error',
+          });
+        }
+      }
+    } else if (action === 'reject') {
+      const vendorEmail = product.vendor?.email;
+
+      if (!vendorEmail) {
+        console.error('Product rejected but vendor email is missing. Email notification skipped.', {
+          productId: product._id,
+          vendorId: product.vendor?._id || product.vendor,
+        });
+      } else {
+        const emailResult = await sendVendorProductRejectedEmail(
+          vendorEmail,
+          product.vendor?.name || 'Vendor',
+          product.name,
+          product._id,
+          rejectionReason
+        );
+
+        if (!emailResult?.success) {
+          console.error('Product rejection email failed to send.', {
+            productId: product._id,
+            vendorEmail,
+            error: emailResult?.error || 'Unknown email error',
+          });
+        }
+      }
+    }
+
+    // ── Feedback loop: log admin decision for future model improvement ────────
+    if (product.aiReviewed && product.aiDecision) {
+      const aiActionEquivalent = action === 'approve' ? 'auto_approved' : 'auto_rejected';
+      const wasOverride        = product.aiDecision !== aiActionEquivalent;
+
+      AIFeedback.create({
+        product:              product._id,
+        productName:          product.name,
+        productDescription:   product.description || '',
+        productCategory:      product.category    || '',
+        aiDecision:           product.aiDecision,
+        aiConfidenceScore:    product.aiConfidenceScore ?? 0,
+        aiReason:             product.aiReason    || '',
+        adminAction:          action,
+        adminRejectionReason: action === 'reject' ? (rejectionReason || '') : '',
+        adminId:              req.user.id,
+        wasOverride,
+      }).catch((err) =>
+        console.error('AIFeedback log failed (non-blocking):', err.message)
+      );
+    }
+
     res.status(200).json({
       success: true,
       message: `Product ${action === 'approve' ? 'approved' : 'rejected'} successfully`,
@@ -486,28 +760,24 @@ exports.upload3DModel = async (req, res, next) => {
       });
     }
 
-    // Validate at least GLB file is provided
-    if (!glbFile) {
+    const currentModel3D = product.model3D || {};
+    const hasExistingModel = Boolean(currentModel3D.glbFile || currentModel3D.usdzFile || currentModel3D.isARReady);
+
+    // Validate at least GLB file is provided when creating a new 3D model
+    if (!hasExistingModel && !glbFile) {
       return res.status(400).json({
         success: false,
         message: '3D Model file (.glb) is required',
       });
     }
 
-    // Update product with 3D model data
-    product.model3D = {
-      glbFile,
-      usdzFile: usdzFile || null,
-      thumbnailAR: null, // Can be generated later
-      fileSize: 0, // Will be calculated
-      isARReady: true,
-      dimensions: {
-        length: dimensions?.length || 0,
-        width: dimensions?.width || 0,
-        height: dimensions?.height || 0,
-      },
-      uploadedAt: new Date(),
-    };
+    // Update product with 3D model data without overwriting untouched fields
+    product.model3D = mergeModel3D(currentModel3D, {
+      glbFile: Object.prototype.hasOwnProperty.call(req.body, 'glbFile') ? glbFile : currentModel3D.glbFile,
+      usdzFile: Object.prototype.hasOwnProperty.call(req.body, 'usdzFile') ? usdzFile : currentModel3D.usdzFile,
+      dimensions: Object.prototype.hasOwnProperty.call(req.body, 'dimensions') ? dimensions : currentModel3D.dimensions,
+      uploadedAt: currentModel3D.uploadedAt || new Date(),
+    });
 
     await product.save();
 

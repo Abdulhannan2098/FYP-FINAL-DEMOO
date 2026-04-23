@@ -47,6 +47,11 @@ const VerifyOTPScreen = ({ navigation, route }) => {
   const handleSubmit = async () => {
     const otpString = otp.join('');
 
+    if (!email) {
+      setError('Email is missing. Please restart the password reset flow.');
+      return;
+    }
+
     if (otpString.length !== 6) {
       setError('Please enter a 6-digit verification code');
       return;
@@ -64,7 +69,8 @@ const VerifyOTPScreen = ({ navigation, route }) => {
       if (response.data.success) {
         navigation.navigate('ResetPassword', {
           email,
-          resetToken: response.data.resetToken || otpString,
+          // Backend uses the OTP itself as the reset token param.
+          resetToken: otpString,
         });
       }
     } catch (err) {
@@ -76,6 +82,11 @@ const VerifyOTPScreen = ({ navigation, route }) => {
   };
 
   const handleResendCode = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Email is missing. Please restart the password reset flow.');
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await apiClient.post('/auth/forgot-password', { email });
@@ -128,7 +139,7 @@ const VerifyOTPScreen = ({ navigation, route }) => {
 
           <View style={styles.content}>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Verify your email</Text>
+              <Text style={styles.cardTitle}>Verify reset code</Text>
               <Text style={styles.cardSubtitle}>
                 Enter the 6-digit code sent to <Text style={styles.email}>{email}</Text>
               </Text>
