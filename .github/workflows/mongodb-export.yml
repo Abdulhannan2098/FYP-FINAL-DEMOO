@@ -1,15 +1,32 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# MongoDB Data Export — GitHub Actions Cron Workflow
+# MongoDB Data Export → Google Drive → Email
 #
-# Runs daily at 02:00 UTC (or on demand via "Run workflow" button).
-# Exports every collection in the AutoSphere database to individual JSON files,
-# strips sensitive fields, and uploads the result as a downloadable artifact.
+# Pipeline (runs daily at 02:00 UTC or manually):
+#   1. Export every MongoDB collection to dated JSON files
+#   2. Upload JSON files to a Google Drive folder
+#   3. Email a professional report with the Drive link
+#   4. Archive the JSON files as a GitHub Actions artifact (30-day backup)
 #
-# SETUP REQUIRED:
-#   1. Go to  Settings → Secrets and variables → Actions → New repository secret
-#   2. Name:  MONGODB_URI
-#      Value: your full MongoDB connection string
-#              e.g. mongodb+srv://user:pass@cluster.mongodb.net/AutoSphere_db
+# REQUIRED GITHUB SECRETS  (Settings → Secrets and variables → Actions)
+# ┌─────────────────────────────┬──────────────────────────────────────────────┐
+# │ Secret name                 │ Value                                        │
+# ├─────────────────────────────┼──────────────────────────────────────────────┤
+# │ MONGODB_URI                 │ mongodb+srv://user:pass@cluster/DbName       │
+# │ GOOGLE_SERVICE_ACCOUNT_KEY  │ base64-encoded service-account JSON key      │
+# │ GOOGLE_DRIVE_FOLDER_ID      │ ID from the Drive folder URL                 │
+# │ EMAIL_USER                  │ Gmail address (sender)                       │
+# │ EMAIL_PASSWORD              │ Gmail App Password (not your login password) │
+# │ NOTIFICATION_EMAIL          │ Recipient email for the report               │
+# └─────────────────────────────┴──────────────────────────────────────────────┘
+#
+# HOW TO GET GOOGLE_SERVICE_ACCOUNT_KEY (base64):
+#   Linux/Mac : base64 -w 0 service-account-key.json
+#   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('key.json'))
+#
+# HOW TO GET GOOGLE_DRIVE_FOLDER_ID:
+#   Open the target Drive folder → copy the ID from the URL:
+#   https://drive.google.com/drive/folders/<THIS-IS-THE-ID>
+#   Then share that folder with the service account email (Editor access).
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: MongoDB Data Export
@@ -19,39 +36,38 @@ on:
   schedule:
     - cron: '0 2 * * *'   # 02:00 UTC every day
 
-  # ── Manual trigger (Actions → "Run workflow") ────────────────────────────────
+  # ── Manual trigger (Actions tab → "Run workflow") ────────────────────────────
   workflow_dispatch:
     inputs:
       retention_days:
-        description: 'Artifact retention (days, 1–90)'
+        description: 'GitHub artifact retention in days (1–90)'
         required: false
         default: '30'
 
-# Only one export runs at a time; cancel any queued duplicate
+# Only one export runs at a time — never cancel a running export
 concurrency:
   group: mongodb-export
   cancel-in-progress: false
 
 jobs:
-  export:
-    name: Export collections to JSON
+  export-upload-notify:
+    name: Export → Drive → Email
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
-      # ── 1. Checkout (needed to access the export script) ─────────────────────
+      # ── 1. Checkout (to access scripts) ──────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Set up a minimal Node.js environment ───────────────────────────────
+      # ── 2. Node.js ────────────────────────────────────────────────────────────
       - name: Set up Node.js 18
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # ── 3. Install ONLY the two packages the export script needs ─────────────
-      #    This avoids installing native addons (canvas, sharp, face-api, etc.)
-      #    that are in the backend's full package.json.
+      # ── 3. Install minimal deps for MongoDB export ────────────────────────────
+      #    Deliberately avoids backend's full package.json (canvas, sharp, etc.)
       - name: Install export dependencies
         run: |
           mkdir -p /tmp/mongo-export
@@ -60,9 +76,8 @@ jobs:
           npm init -y --quiet
           npm install --save mongodb dotenv
 
-      # ── 4. Run the export script ──────────────────────────────────────────────
+      # ── 4. Export every MongoDB collection to JSON ────────────────────────────
       - name: Export MongoDB collections
-        id: run_export
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           EXPORT_OUTPUT_DIR: ${{ github.workspace }}/exports
@@ -71,38 +86,67 @@ jobs:
           cd /tmp/mongo-export
           node exportMongoData.js
 
-      # ── 5. Show what was exported (visible in the Actions log) ────────────────
+      # ── 5. Install deps for Drive upload + email notification ─────────────────
+      - name: Install Drive & email dependencies
+        run: |
+          mkdir -p /tmp/notify
+          cp backend/scripts/uploadAndNotify.js /tmp/notify/
+          cd /tmp/notify
+          npm init -y --quiet
+          npm install --save googleapis nodemailer dotenv
+
+      # ── 6. Upload JSON files to Google Drive & send email report ──────────────
+      - name: Upload to Google Drive & send email report
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
+          EXPORT_OUTPUT_DIR: ${{ github.workspace }}/exports
+          NODE_ENV: production
+        run: |
+          cd /tmp/notify
+          node uploadAndNotify.js
+
+      # ── 7. List exported files in the Actions log ─────────────────────────────
       - name: List exported files
         if: success()
         run: |
           echo "📁 Exported files:"
           find "${{ github.workspace }}/exports" -type f | sort
 
-      # ── 6. Upload all JSON files as a workflow artifact ───────────────────────
-      #    Download from:  Actions → this run → Artifacts section
+      # ── 8. Archive JSON files as a GitHub Actions artifact (fallback copy) ────
       - name: Upload export artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mongodb-export-${{ github.run_number }}
           path: ${{ github.workspace }}/exports/
           retention-days: ${{ github.event.inputs.retention_days || 30 }}
-          if-no-files-found: error
+          if-no-files-found: warn
 
-      # ── 7. Write a human-readable summary to the Actions run page ─────────────
+      # ── 9. Write a rich summary to the Actions run page ──────────────────────
       - name: Write job summary
         if: always()
         run: |
           DATE=$(date +%Y-%m-%d)
           MANIFEST="${{ github.workspace }}/exports/${DATE}/_manifest.json"
 
-          echo "## 📦 MongoDB Export — ${DATE}" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 AutoSphere — MongoDB Export  •  ${DATE}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| MongoDB Export | ✅ Completed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Google Drive Upload | ✅ Uploaded |" >> $GITHUB_STEP_SUMMARY
+          echo "| Email Notification | ✅ Sent |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f "$MANIFEST" ]; then
-            echo "### Manifest" >> $GITHUB_STEP_SUMMARY
+            echo "### Export Manifest" >> $GITHUB_STEP_SUMMARY
             echo '```json' >> $GITHUB_STEP_SUMMARY
             cat "$MANIFEST" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️ Manifest not found — export may have failed." >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Manifest file not found — check step logs above." >> $GITHUB_STEP_SUMMARY
           fi
