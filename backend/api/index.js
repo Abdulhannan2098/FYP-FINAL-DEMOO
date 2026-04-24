@@ -23,6 +23,8 @@ const wishlistRoutes = require('../routes/wishlist');
 const chatRoutes = require('../routes/chat');
 const vendorRoutes = require('../routes/vendor');
 const vendorsRoutes = require('../routes/vendors');
+// Microservice proxy routes (additive — no existing routes modified)
+const analyticsProxyRoutes = require('../routes/analyticsProxy');
 
 // Initialize Express app
 const app = express();
@@ -109,6 +111,7 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/vendor', vendorRoutes);
 app.use('/api/vendors', vendorsRoutes);
+app.use('/api/microservices/analytics', analyticsProxyRoutes); // Python analytics microservice
 
 // Health check route
 app.get('/api/health', (req, res) => {

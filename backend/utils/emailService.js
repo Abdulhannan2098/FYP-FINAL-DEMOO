@@ -1184,22 +1184,139 @@ const sendVendorProductDeletedEmail = async (to, vendorName, productName, produc
   return await sendEmail({ to, ...emailContent });
 };
 
+// ─── Microservice bridge (non-intrusive) ─────────────────────────────────────
+// When NOTIFICATION_SERVICE_URL is set, the functions below attempt to route
+// the request through the Python notification microservice first.
+// On ANY failure (network error, timeout, 5xx), they transparently fall back
+// to the original nodemailer implementation above — behaviour is identical.
+// When NOTIFICATION_SERVICE_URL is NOT set, these wrappers are never used.
+
+const _notifyUrl   = process.env.NOTIFICATION_SERVICE_URL || '';
+const _notifyKey   = process.env.NOTIFICATION_SERVICE_API_KEY || 'autosphere-internal-notify-key';
+
+async function _tryNotifyService(endpoint, payload) {
+  if (!_notifyUrl) return null; // microservice not configured — skip
+  try {
+    const { postJson } = require('./microserviceClient');
+    const result = await postJson(`${_notifyUrl}${endpoint}`, payload, _notifyKey);
+    if (result.success && result.data?.success) {
+      console.log(`✉️  [notify-svc] ${endpoint} → ${payload.to} | id=${result.data.message_id}`);
+      return result.data;
+    }
+    console.warn(`⚠️  [notify-svc] ${endpoint} failed (${result.error || 'unknown'}) — falling back to SMTP`);
+    return null;
+  } catch (err) {
+    console.warn(`⚠️  [notify-svc] ${endpoint} exception (${err.message}) — falling back to SMTP`);
+    return null;
+  }
+}
+
+// Wrapped exports — routes via microservice when available, otherwise nodemailer
+const _sendWelcomeEmail = async (to, userName, userRole) => {
+  const ms = await _tryNotifyService('/api/notify/welcome', { to, user_name: userName, user_role: userRole });
+  if (ms) return ms;
+  return sendWelcomeEmail(to, userName, userRole);
+};
+
+const _sendEmailVerificationOTP = async (to, userName, otp) => {
+  const ms = await _tryNotifyService('/api/notify/email-verification', { to, user_name: userName, otp });
+  if (ms) return ms;
+  return sendEmailVerificationOTP(to, userName, otp);
+};
+
+const _sendPasswordResetEmail = async (to, userName, resetToken, resetUrl) => {
+  const ms = await _tryNotifyService('/api/notify/password-reset', { to, user_name: userName, reset_token: resetToken, reset_url: resetUrl });
+  if (ms) return ms;
+  return sendPasswordResetEmail(to, userName, resetToken, resetUrl);
+};
+
+const _sendPasswordChangeNotification = async (to, userName) => {
+  const ms = await _tryNotifyService('/api/notify/password-changed', { to, user_name: userName });
+  if (ms) return ms;
+  return sendPasswordChangeNotification(to, userName);
+};
+
+const _sendOrderConfirmationEmail = async (to, userName, orderId, orderDetails, grandTotal, vendorCount) => {
+  const items = Array.isArray(orderDetails)
+    ? orderDetails.map((i) => ({ name: i.name || 'Item', quantity: i.quantity || 1, price: i.price || 0 }))
+    : [];
+  const ms = await _tryNotifyService('/api/notify/order-confirmation', { to, user_name: userName, order_id: orderId, order_items: items, grand_total: grandTotal, vendor_count: vendorCount });
+  if (ms) return ms;
+  return sendOrderConfirmationEmail(to, userName, orderId, orderDetails, grandTotal, vendorCount);
+};
+
+const _sendOrderStatusUpdateEmail = async (to, userName, orderId, status, vendorName) => {
+  const ms = await _tryNotifyService('/api/notify/order-status', { to, user_name: userName, order_id: orderId, status, vendor_name: vendorName });
+  if (ms) return ms;
+  return sendOrderStatusUpdateEmail(to, userName, orderId, status, vendorName);
+};
+
+const _sendVendorRegistrationAcknowledgment = async (to, vendorName, businessName) => {
+  const ms = await _tryNotifyService('/api/notify/vendor-registration', { to, vendor_name: vendorName, business_name: businessName });
+  if (ms) return ms;
+  return sendVendorRegistrationAcknowledgment(to, vendorName, businessName);
+};
+
+const _sendVendorDecisionEmail = async (to, vendorName, isApproved, rejectionReason = '') => {
+  const ms = await _tryNotifyService('/api/notify/vendor-decision', { to, vendor_name: vendorName, is_approved: isApproved, rejection_reason: rejectionReason });
+  if (ms) return ms;
+  return sendVendorDecisionEmail(to, vendorName, isApproved, rejectionReason);
+};
+
+const _sendVendorVerificationApproved = async (to, vendorName, businessName) => {
+  const ms = await _tryNotifyService('/api/notify/vendor-verification-approved', { to, vendor_name: vendorName, business_name: businessName });
+  if (ms) return ms;
+  return sendVendorVerificationApproved(to, vendorName, businessName);
+};
+
+const _sendVendorVerificationFailed = async (to, vendorName, reason) => {
+  const ms = await _tryNotifyService('/api/notify/vendor-verification-failed', { to, vendor_name: vendorName, reason });
+  if (ms) return ms;
+  return sendVendorVerificationFailed(to, vendorName, reason);
+};
+
+const _sendVendorProductApprovedEmail = async (to, vendorName, productName, productId) => {
+  const ms = await _tryNotifyService('/api/notify/product-approved', { to, vendor_name: vendorName, product_name: productName, product_id: productId });
+  if (ms) return ms;
+  return sendVendorProductApprovedEmail(to, vendorName, productName, productId);
+};
+
+const _sendVendorNewOrderEmail = async (to, vendorName, orderNumber, items, totalAmount) => {
+  const safeItems = Array.isArray(items)
+    ? items.map((i) => ({ name: i.name || 'Item', quantity: i.quantity || 1, price: i.price || 0 }))
+    : [];
+  const ms = await _tryNotifyService('/api/notify/new-order', { to, vendor_name: vendorName, order_number: orderNumber, items: safeItems, total_amount: totalAmount });
+  if (ms) return ms;
+  return sendVendorNewOrderEmail(to, vendorName, orderNumber, items, totalAmount);
+};
+
+const _sendVendorProductRejectedEmail = async (to, vendorName, productName, productId, rejectionReason) => {
+  const ms = await _tryNotifyService('/api/notify/product-rejected', { to, vendor_name: vendorName, product_name: productName, product_id: productId, rejection_reason: rejectionReason });
+  if (ms) return ms;
+  return sendVendorProductRejectedEmail(to, vendorName, productName, productId, rejectionReason);
+};
+
 module.exports = {
+  // Low-level
   sendEmail,
   verifyConnection,
-  sendWelcomeEmail,
-  sendPasswordResetEmail,
-  sendOrderConfirmationEmail,
-  sendOrderStatusUpdateEmail,
-  sendTwoFactorSetupEmail,
-  sendEmailVerificationOTP,
-  sendPasswordChangeNotification,
-  sendVendorRegistrationAcknowledgment,
-  sendVendorDecisionEmail,
-  sendVendorVerificationApproved,
-  sendVendorVerificationFailed,
-  sendVendorProductApprovedEmail,
-  sendVendorNewOrderEmail,
-  sendVendorProductRejectedEmail,
-  sendVendorProductDeletedEmail,
+
+  // All public functions now go through the microservice bridge.
+  // When NOTIFICATION_SERVICE_URL is unset the _ wrappers call the
+  // original implementations directly — zero behaviour change.
+  sendWelcomeEmail:                    _sendWelcomeEmail,
+  sendEmailVerificationOTP:            _sendEmailVerificationOTP,
+  sendPasswordResetEmail:              _sendPasswordResetEmail,
+  sendPasswordChangeNotification:      _sendPasswordChangeNotification,
+  sendOrderConfirmationEmail:          _sendOrderConfirmationEmail,
+  sendOrderStatusUpdateEmail:          _sendOrderStatusUpdateEmail,
+  sendVendorRegistrationAcknowledgment: _sendVendorRegistrationAcknowledgment,
+  sendVendorDecisionEmail:             _sendVendorDecisionEmail,
+  sendVendorVerificationApproved:      _sendVendorVerificationApproved,
+  sendVendorVerificationFailed:        _sendVendorVerificationFailed,
+  sendVendorProductApprovedEmail:      _sendVendorProductApprovedEmail,
+  sendVendorNewOrderEmail:             _sendVendorNewOrderEmail,
+  sendVendorProductRejectedEmail:      _sendVendorProductRejectedEmail,
+  sendVendorProductDeletedEmail,       // no microservice wrapper (admin action)
+  sendTwoFactorSetupEmail,             // no microservice wrapper (contains binary QR data)
 };
