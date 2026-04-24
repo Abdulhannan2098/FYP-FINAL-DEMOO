@@ -6,23 +6,23 @@ const morgan = require('morgan');
 const mongoSanitize = require('express-mongo-sanitize');
 const hpp = require('hpp');
 const { Server } = require('socket.io');
-const passport = require('./config/passport');
-const connectDB = require('./config/db');
-const errorHandler = require('./middlewares/errorHandler');
-const { generalLimiter } = require('./middlewares/rateLimiter');
-const env = require('./config/env');
-const { verifyConnection: verifyEmailConnection } = require('./utils/emailService');
+const passport = require('../config/passport');
+const connectDB = require('../config/db');
+const errorHandler = require('../middlewares/errorHandler');
+const { generalLimiter } = require('../middlewares/rateLimiter');
+const env = require('../config/env');
+const { verifyConnection: verifyEmailConnection } = require('../utils/emailService');
 
 // Import routes
-const authRoutes = require('./routes/auth');
-const sessionRoutes = require('./routes/sessions');
-const productRoutes = require('./routes/products');
-const orderRoutes = require('./routes/orders');
-const reviewRoutes = require('./routes/reviews');
-const wishlistRoutes = require('./routes/wishlist');
-const chatRoutes = require('./routes/chat');
-const vendorRoutes = require('./routes/vendor');
-const vendorsRoutes = require('./routes/vendors');
+const authRoutes = require('../routes/auth');
+const sessionRoutes = require('../routes/sessions');
+const productRoutes = require('../routes/products');
+const orderRoutes = require('../routes/orders');
+const reviewRoutes = require('../routes/reviews');
+const wishlistRoutes = require('../routes/wishlist');
+const chatRoutes = require('../routes/chat');
+const vendorRoutes = require('../routes/vendor');
+const vendorsRoutes = require('../routes/vendors');
 
 // Initialize Express app
 const app = express();
@@ -135,20 +135,21 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // Initialize Socket.io handlers
-require('./socket/chatHandler')(io);
+require('../socket/chatHandler')(io);
 
 // Start server
-const PORT = env.PORT || 5000;
-server.listen(PORT, '0.0.0.0', async () => {
-  console.log(`🚀 Server running in ${env.NODE_ENV} mode on port ${PORT}`);
-  console.log(`📡 Socket.io server ready on port ${PORT}`);
-  console.log(`📱 Network accessible - Use your local IP to access from mobile`);
-
-  // Verify email service connection on startup
-  const emailStatus = await verifyEmailConnection();
-  if (emailStatus.success) {
-    console.log(`📧 Email service: ${emailStatus.mode === 'smtp' ? 'SMTP connected' : 'Console mode (no delivery)'}`);
-  } else {
-    console.error(`⚠️  Email service: Connection failed - ${emailStatus.error}`);
-  }
-});
+// const PORT = env.PORT || 5000;
+// server.listen(PORT, '0.0.0.0', async () => {
+//   console.log(`🚀 Server running in ${env.NODE_ENV} mode on port ${PORT}`);
+//   console.log(`📡 Socket.io server ready on port ${PORT}`);
+//   console.log(`📱 Network accessible - Use your local IP to access from mobile`);
+//
+//   // Verify email service connection on startup
+//   const emailStatus = await verifyEmailConnection();
+//   if (emailStatus.success) {
+//     console.log(`📧 Email service: ${emailStatus.mode === 'smtp' ? 'SMTP connected' : 'Console mode (no delivery)'}`);
+//   } else {
+//     console.error(`⚠️  Email service: Connection failed - ${emailStatus.error}`);
+//   }
+// });
+export default app;

@@ -1,0 +1,108 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MongoDB Data Export — GitHub Actions Cron Workflow
+#
+# Runs daily at 02:00 UTC (or on demand via "Run workflow" button).
+# Exports every collection in the AutoSphere database to individual JSON files,
+# strips sensitive fields, and uploads the result as a downloadable artifact.
+#
+# SETUP REQUIRED:
+#   1. Go to  Settings → Secrets and variables → Actions → New repository secret
+#   2. Name:  MONGODB_URI
+#      Value: your full MongoDB connection string
+#              e.g. mongodb+srv://user:pass@cluster.mongodb.net/AutoSphere_db
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: MongoDB Data Export
+
+on:
+  # ── Scheduled run ────────────────────────────────────────────────────────────
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC every day
+
+  # ── Manual trigger (Actions → "Run workflow") ────────────────────────────────
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: 'Artifact retention (days, 1–90)'
+        required: false
+        default: '30'
+
+# Only one export runs at a time; cancel any queued duplicate
+concurrency:
+  group: mongodb-export
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Export collections to JSON
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # ── 1. Checkout (needed to access the export script) ─────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up a minimal Node.js environment ───────────────────────────────
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # ── 3. Install ONLY the two packages the export script needs ─────────────
+      #    This avoids installing native addons (canvas, sharp, face-api, etc.)
+      #    that are in the backend's full package.json.
+      - name: Install export dependencies
+        run: |
+          mkdir -p /tmp/mongo-export
+          cp backend/scripts/exportMongoData.js /tmp/mongo-export/
+          cd /tmp/mongo-export
+          npm init -y --quiet
+          npm install --save mongodb dotenv
+
+      # ── 4. Run the export script ──────────────────────────────────────────────
+      - name: Export MongoDB collections
+        id: run_export
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          EXPORT_OUTPUT_DIR: ${{ github.workspace }}/exports
+          NODE_ENV: production
+        run: |
+          cd /tmp/mongo-export
+          node exportMongoData.js
+
+      # ── 5. Show what was exported (visible in the Actions log) ────────────────
+      - name: List exported files
+        if: success()
+        run: |
+          echo "📁 Exported files:"
+          find "${{ github.workspace }}/exports" -type f | sort
+
+      # ── 6. Upload all JSON files as a workflow artifact ───────────────────────
+      #    Download from:  Actions → this run → Artifacts section
+      - name: Upload export artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mongodb-export-${{ github.run_number }}
+          path: ${{ github.workspace }}/exports/
+          retention-days: ${{ github.event.inputs.retention_days || 30 }}
+          if-no-files-found: error
+
+      # ── 7. Write a human-readable summary to the Actions run page ─────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          MANIFEST="${{ github.workspace }}/exports/${DATE}/_manifest.json"
+
+          echo "## 📦 MongoDB Export — ${DATE}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "$MANIFEST" ]; then
+            echo "### Manifest" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            cat "$MANIFEST" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Manifest not found — export may have failed." >> $GITHUB_STEP_SUMMARY
+          fi

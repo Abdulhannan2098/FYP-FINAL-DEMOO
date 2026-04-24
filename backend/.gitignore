@@ -10,3 +10,7 @@ build/
 coverage/
 .vscode/
 .idea/
+.vercel
+
+# Local MongoDB export output (CI exports are uploaded as GitHub Artifacts)
+../exports/
