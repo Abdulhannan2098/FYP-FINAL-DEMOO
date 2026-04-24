@@ -7,13 +7,19 @@
  * 3. Sets the folder to "anyone with the link can view".
  * 4. Sends a professional HTML email containing the Drive link + summary.
  *
+ * Uses OAuth2 (refresh token) — NOT a service account — so files are owned
+ * by your actual Google account and count against your real Drive quota.
+ * Service accounts have no storage quota and will always fail on My Drive.
+ *
  * Required env vars (set as GitHub Secrets):
- *   GOOGLE_SERVICE_ACCOUNT_KEY  — base64-encoded service-account JSON key
- *   GOOGLE_DRIVE_FOLDER_ID      — Drive folder ID that the service account can write to
- *   EMAIL_USER                  — Gmail address used as sender (same as backend .env)
- *   EMAIL_PASSWORD              — Gmail App Password (same as backend .env)
- *   NOTIFICATION_EMAIL          — recipient address for the report
- *   EXPORT_OUTPUT_DIR           — path where exportMongoData.js wrote the files
+ *   GOOGLE_CLIENT_ID      — OAuth2 client ID from Google Cloud Console
+ *   GOOGLE_CLIENT_SECRET  — OAuth2 client secret
+ *   GOOGLE_REFRESH_TOKEN  — long-lived refresh token (see setup guide)
+ *   GOOGLE_DRIVE_FOLDER_ID — Drive folder ID the token owner has write access to
+ *   EMAIL_USER            — Gmail address used as sender (same as backend .env)
+ *   EMAIL_PASSWORD        — Gmail App Password (same as backend .env)
+ *   NOTIFICATION_EMAIL    — recipient address for the report
+ *   EXPORT_OUTPUT_DIR     — path where exportMongoData.js wrote the files
  */
 
 const { google } = require('googleapis');
@@ -34,7 +40,9 @@ const EXPORT_DIR = path.join(EXPORT_BASE, DATE_STAMP);
 // ─── Env validation ───────────────────────────────────────────────────────────
 
 const REQUIRED = [
-  'GOOGLE_SERVICE_ACCOUNT_KEY',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'GOOGLE_REFRESH_TOKEN',
   'GOOGLE_DRIVE_FOLDER_ID',
   'EMAIL_USER',
   'EMAIL_PASSWORD',
@@ -52,17 +60,17 @@ if (missing.length) {
 // ─── Google Drive helpers ─────────────────────────────────────────────────────
 
 async function buildDriveClient() {
-  const raw = Buffer.from(
-    process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
-    'base64'
-  ).toString('utf8');
-  const credentials = JSON.parse(raw);
-
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/drive'],
+  // OAuth2 with a refresh token — files are owned by the real Google user,
+  // not a service account, so there is no storage-quota issue.
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    'urn:ietf:wg:oauth:2.0:oob'
+  );
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
   });
-  return google.drive({ version: 'v3', auth });
+  return google.drive({ version: 'v3', auth: oauth2Client });
 }
 
 async function createFolder(drive, parentId, name) {

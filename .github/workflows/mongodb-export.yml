@@ -8,25 +8,41 @@
 #   4. Archive the JSON files as a GitHub Actions artifact (30-day backup)
 #
 # REQUIRED GITHUB SECRETS  (Settings → Secrets and variables → Actions)
-# ┌─────────────────────────────┬──────────────────────────────────────────────┐
-# │ Secret name                 │ Value                                        │
-# ├─────────────────────────────┼──────────────────────────────────────────────┤
-# │ MONGODB_URI                 │ mongodb+srv://user:pass@cluster/DbName       │
-# │ GOOGLE_SERVICE_ACCOUNT_KEY  │ base64-encoded service-account JSON key      │
-# │ GOOGLE_DRIVE_FOLDER_ID      │ ID from the Drive folder URL                 │
-# │ EMAIL_USER                  │ Gmail address (sender)                       │
-# │ EMAIL_PASSWORD              │ Gmail App Password (not your login password) │
-# │ NOTIFICATION_EMAIL          │ Recipient email for the report               │
-# └─────────────────────────────┴──────────────────────────────────────────────┘
+# ┌──────────────────────────┬─────────────────────────────────────────────────┐
+# │ Secret name              │ Value                                           │
+# ├──────────────────────────┼─────────────────────────────────────────────────┤
+# │ MONGODB_URI              │ mongodb+srv://user:pass@cluster/DbName          │
+# │ GOOGLE_CLIENT_ID         │ OAuth2 client ID from Google Cloud Console      │
+# │ GOOGLE_CLIENT_SECRET     │ OAuth2 client secret                            │
+# │ GOOGLE_REFRESH_TOKEN     │ Long-lived refresh token (see setup below)      │
+# │ GOOGLE_DRIVE_FOLDER_ID   │ ID from the Drive folder URL                   │
+# │ EMAIL_USER               │ Gmail address (sender)                          │
+# │ EMAIL_PASSWORD           │ Gmail App Password (not your login password)    │
+# │ NOTIFICATION_EMAIL       │ Recipient email for the report                  │
+# └──────────────────────────┴─────────────────────────────────────────────────┘
 #
-# HOW TO GET GOOGLE_SERVICE_ACCOUNT_KEY (base64):
-#   Linux/Mac : base64 -w 0 service-account-key.json
-#   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('key.json'))
+# WHY OAuth2 INSTEAD OF SERVICE ACCOUNT:
+#   Service accounts have no Google Drive storage quota — uploads to My Drive
+#   fail with "Service Accounts do not have storage quota." OAuth2 with a
+#   refresh token uploads as YOUR Google account, so quota is never an issue.
+#
+# HOW TO GET GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET:
+#   1. console.cloud.google.com → your project → APIs & Services → Credentials
+#   2. Create credential → OAuth 2.0 Client ID → Desktop app
+#   3. Copy Client ID and Client Secret
+#
+# HOW TO GET GOOGLE_REFRESH_TOKEN (one-time, ~2 minutes):
+#   1. Go to: https://developers.google.com/oauthplayground
+#   2. Click the gear icon (top-right) → check "Use your own OAuth credentials"
+#   3. Enter your Client ID and Client Secret → Close
+#   4. In Step 1, find "Drive API v3" → select "https://www.googleapis.com/auth/drive"
+#   5. Click "Authorize APIs" → sign in with your Google account → Allow
+#   6. In Step 2, click "Exchange authorization code for tokens"
+#   7. Copy the "Refresh token" value → paste as GOOGLE_REFRESH_TOKEN secret
 #
 # HOW TO GET GOOGLE_DRIVE_FOLDER_ID:
 #   Open the target Drive folder → copy the ID from the URL:
 #   https://drive.google.com/drive/folders/<THIS-IS-THE-ID>
-#   Then share that folder with the service account email (Editor access).
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: MongoDB Data Export
@@ -98,7 +114,9 @@ jobs:
       # ── 6. Upload JSON files to Google Drive & send email report ──────────────
       - name: Upload to Google Drive & send email report
         env:
-          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
