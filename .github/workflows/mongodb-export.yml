@@ -1,48 +1,32 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# MongoDB Data Export → Google Drive → Email
+# MongoDB Data Export → Supabase Storage → Email
 #
 # Pipeline (runs daily at 02:00 UTC or manually):
 #   1. Export every MongoDB collection to dated JSON files
-#   2. Upload JSON files to a Google Drive folder
-#   3. Email a professional report with the Drive link
+#   2. Upload JSON files to Supabase Storage bucket
+#   3. Email a professional report with file links
 #   4. Archive the JSON files as a GitHub Actions artifact (30-day backup)
 #
 # REQUIRED GITHUB SECRETS  (Settings → Secrets and variables → Actions)
-# ┌──────────────────────────┬─────────────────────────────────────────────────┐
-# │ Secret name              │ Value                                           │
-# ├──────────────────────────┼─────────────────────────────────────────────────┤
-# │ MONGODB_URI              │ mongodb+srv://user:pass@cluster/DbName          │
-# │ GOOGLE_CLIENT_ID         │ OAuth2 client ID from Google Cloud Console      │
-# │ GOOGLE_CLIENT_SECRET     │ OAuth2 client secret                            │
-# │ GOOGLE_REFRESH_TOKEN     │ Long-lived refresh token (see setup below)      │
-# │ GOOGLE_DRIVE_FOLDER_ID   │ ID from the Drive folder URL                   │
-# │ EMAIL_USER               │ Gmail address (sender)                          │
-# │ EMAIL_PASSWORD           │ Gmail App Password (not your login password)    │
-# │ NOTIFICATION_EMAIL       │ Recipient email for the report                  │
-# └──────────────────────────┴─────────────────────────────────────────────────┘
+# ┌──────────────────────────────┬────────────────────────────────────────────┐
+# │ Secret name                  │ Where to get it                            │
+# ├──────────────────────────────┼────────────────────────────────────────────┤
+# │ MONGODB_URI                  │ Your MongoDB connection string             │
+# │ SUPABASE_URL                 │ Supabase project → Settings → API → URL   │
+# │ SUPABASE_SERVICE_ROLE_KEY    │ Supabase project → Settings → API →       │
+# │                              │   service_role (secret key)                │
+# │ SUPABASE_BUCKET              │ Name of your storage bucket (e.g.          │
+# │                              │   "db-exports") — create it first         │
+# │ EMAIL_USER                   │ Gmail address used as sender               │
+# │ EMAIL_PASSWORD               │ Gmail App Password (not login password)    │
+# │ NOTIFICATION_EMAIL           │ Recipient email for the export report      │
+# └──────────────────────────────┴────────────────────────────────────────────┘
 #
-# WHY OAuth2 INSTEAD OF SERVICE ACCOUNT:
-#   Service accounts have no Google Drive storage quota — uploads to My Drive
-#   fail with "Service Accounts do not have storage quota." OAuth2 with a
-#   refresh token uploads as YOUR Google account, so quota is never an issue.
-#
-# HOW TO GET GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET:
-#   1. console.cloud.google.com → your project → APIs & Services → Credentials
-#   2. Create credential → OAuth 2.0 Client ID → Desktop app
-#   3. Copy Client ID and Client Secret
-#
-# HOW TO GET GOOGLE_REFRESH_TOKEN (one-time, ~2 minutes):
-#   1. Go to: https://developers.google.com/oauthplayground
-#   2. Click the gear icon (top-right) → check "Use your own OAuth credentials"
-#   3. Enter your Client ID and Client Secret → Close
-#   4. In Step 1, find "Drive API v3" → select "https://www.googleapis.com/auth/drive"
-#   5. Click "Authorize APIs" → sign in with your Google account → Allow
-#   6. In Step 2, click "Exchange authorization code for tokens"
-#   7. Copy the "Refresh token" value → paste as GOOGLE_REFRESH_TOKEN secret
-#
-# HOW TO GET GOOGLE_DRIVE_FOLDER_ID:
-#   Open the target Drive folder → copy the ID from the URL:
-#   https://drive.google.com/drive/folders/<THIS-IS-THE-ID>
+# SUPABASE SETUP (one-time, ~3 minutes):
+#   1. supabase.com → New project
+#   2. Storage → New bucket → name it (e.g. "db-exports") → Public: ON
+#   3. Settings → API → copy "Project URL" and "service_role" key
+#   4. Add all three as GitHub Secrets above
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: MongoDB Data Export
@@ -67,12 +51,12 @@ concurrency:
 
 jobs:
   export-upload-notify:
-    name: Export → Drive → Email
+    name: Export → Supabase → Email
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
     steps:
-      # ── 1. Checkout (to access scripts) ──────────────────────────────────────
+      # ── 1. Checkout ───────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -83,7 +67,7 @@ jobs:
           node-version: '18'
 
       # ── 3. Install minimal deps for MongoDB export ────────────────────────────
-      #    Deliberately avoids backend's full package.json (canvas, sharp, etc.)
+      #    Avoids backend's full package.json (canvas, sharp, face-api, etc.)
       - name: Install export dependencies
         run: |
           mkdir -p /tmp/mongo-export
@@ -102,22 +86,21 @@ jobs:
           cd /tmp/mongo-export
           node exportMongoData.js
 
-      # ── 5. Install deps for Drive upload + email notification ─────────────────
-      - name: Install Drive & email dependencies
+      # ── 5. Install deps for Supabase upload + email ───────────────────────────
+      - name: Install Supabase & email dependencies
         run: |
           mkdir -p /tmp/notify
           cp backend/scripts/uploadAndNotify.js /tmp/notify/
           cd /tmp/notify
           npm init -y --quiet
-          npm install --save googleapis nodemailer dotenv
+          npm install --save @supabase/supabase-js nodemailer dotenv
 
-      # ── 6. Upload JSON files to Google Drive & send email report ──────────────
-      - name: Upload to Google Drive & send email report
+      # ── 6. Upload to Supabase Storage & send email report ─────────────────────
+      - name: Upload to Supabase & send email report
         env:
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
@@ -134,7 +117,7 @@ jobs:
           echo "📁 Exported files:"
           find "${{ github.workspace }}/exports" -type f | sort
 
-      # ── 8. Archive JSON files as a GitHub Actions artifact (fallback copy) ────
+      # ── 8. Archive JSON files as GitHub artifact (30-day fallback copy) ───────
       - name: Upload export artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -144,7 +127,7 @@ jobs:
           retention-days: ${{ github.event.inputs.retention_days || 30 }}
           if-no-files-found: warn
 
-      # ── 9. Write a rich summary to the Actions run page ──────────────────────
+      # ── 9. Write summary to Actions run page ──────────────────────────────────
       - name: Write job summary
         if: always()
         run: |
@@ -155,9 +138,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Result |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| MongoDB Export | ✅ Completed |" >> $GITHUB_STEP_SUMMARY
-          echo "| Google Drive Upload | ✅ Uploaded |" >> $GITHUB_STEP_SUMMARY
-          echo "| Email Notification | ✅ Sent |" >> $GITHUB_STEP_SUMMARY
+          echo "| MongoDB Export     | ✅ Completed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Supabase Upload    | ✅ Uploaded  |" >> $GITHUB_STEP_SUMMARY
+          echo "| Email Notification | ✅ Sent      |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f "$MANIFEST" ]; then
