@@ -159,7 +159,7 @@ const Login = () => {
 
         {/* Form Card */}
         <div className="bg-surface rounded-2xl shadow-card border border-surface-light p-8 space-y-6">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate data-testid="login-form">
             <div>
               <label htmlFor="email" className="block text-sm font-semibold text-text-primary mb-2">
                 Email Address
