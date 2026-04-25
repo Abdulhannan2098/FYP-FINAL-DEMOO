@@ -49,8 +49,9 @@ const io = new Server(server, {
 // Make io accessible to routes
 app.set('io', io);
 
-// Connect to MongoDB
-connectDB();
+// Kick off the initial connection attempt on module load so it warms up in parallel.
+// The per-request middleware below will await it before any query runs.
+connectDB().catch(() => {});
 
 // Middlewares
 app.use(helmet({
@@ -88,6 +89,23 @@ if (env.NODE_ENV === 'production') {
 // Note: local /uploads static serving is intentionally removed.
 // All images are stored on Cloudinary and served via CDN URLs.
 
+// Ensure MongoDB is connected before every API request.
+// This is the critical fix for Vercel serverless cold-start timeouts:
+// connectDB() above fires async on module load, but routes could be hit
+// before it resolves. Awaiting here guarantees the connection is ready.
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('DB connection failed on request:', err.message);
+    res.status(503).json({
+      success: false,
+      message: 'Database temporarily unavailable. Please try again in a moment.',
+    });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/sessions', sessionRoutes);
@@ -100,16 +118,18 @@ app.use('/api/vendor', vendorRoutes);
 app.use('/api/vendors', vendorsRoutes);
 app.use('/api/microservices/analytics', analyticsProxyRoutes); // Python analytics microservice
 
-// Health check route
+// Health check route — reflects real DB connection state
 app.get('/api/health', (req, res) => {
+  const mongoose = require('mongoose');
+  const dbState = ['disconnected', 'connected', 'connecting', 'disconnecting'];
   res.status(200).json({
     success: true,
     message: 'AutoSphere API is running',
     timestamp: new Date().toISOString(),
     services: {
-      database: 'connected',
-      socketio: 'active'
-    }
+      database: dbState[mongoose.connection.readyState] || 'unknown',
+      socketio: 'active',
+    },
   });
 });
 

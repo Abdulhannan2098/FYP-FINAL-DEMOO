@@ -1,19 +1,39 @@
 const mongoose = require('mongoose');
 const env = require('./env');
 
-const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(env.MONGODB_URI);
+// On Vercel serverless, module-level variables persist within a warm container.
+// Caching the connection promise avoids opening a new connection on every invocation
+// and prevents the 10-second Mongoose buffer timeout on cold starts.
+let connectionPromise = null;
 
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error(`❌ MongoDB Connection Error: ${error.message}`);
-    console.warn('⚠️  Server will continue without database. Please check your MongoDB configuration.');
-    // Don't exit in development - allow server to run for testing
-    if (process.env.NODE_ENV === 'production') {
-      process.exit(1);
-    }
+const connectDB = async () => {
+  // Already connected — reuse without doing anything.
+  if (mongoose.connection.readyState === 1) return;
+
+  // A connection attempt is already in flight — wait for it instead of
+  // opening a second connection (which would waste Atlas connection slots).
+  if (connectionPromise) {
+    return connectionPromise;
   }
+
+  connectionPromise = mongoose
+    .connect(env.MONGODB_URI, {
+      bufferCommands: false,        // fail fast — don't silently queue queries
+      serverSelectionTimeoutMS: 15000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+    })
+    .then((conn) => {
+      console.log(`MongoDB Connected: ${conn.connection.host}`);
+      return conn;
+    })
+    .catch((error) => {
+      console.error(`MongoDB Connection Error: ${error.message}`);
+      connectionPromise = null;  // reset so the next request retries
+      throw error;
+    });
+
+  return connectionPromise;
 };
 
 module.exports = connectDB;
