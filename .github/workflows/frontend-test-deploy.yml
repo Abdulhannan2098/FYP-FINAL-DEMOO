@@ -28,23 +28,33 @@ jobs:
         working-directory: frontend
         run: npm test -- --run
 
-      - name: Pull Vercel project settings
+      # ── Deploy to autosphere (autospher.store – production domain) ──────────
+      - name: Pull Vercel settings (autosphere)
         working-directory: frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AUTOSPHERE_PROJECT_ID }}
         run: npx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
 
-      - name: Build project via Vercel
+      - name: Build (autosphere)
         working-directory: frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AUTOSPHERE_PROJECT_ID }}
         run: npx vercel build --prod --token=$VERCEL_TOKEN
 
-      - name: Deploy pre-built output to production
+      - name: Deploy to production – autospher.store
+        working-directory: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AUTOSPHERE_PROJECT_ID }}
+        run: npx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+
+      # ── Deploy to autospheree (autospheree-beta.vercel.app – preview URL) ──
+      - name: Deploy to preview – autospheree-beta.vercel.app
         working-directory: frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

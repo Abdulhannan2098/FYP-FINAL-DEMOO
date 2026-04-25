@@ -1,1 +1,16 @@
-{"projectId":"prj_OQKBEnY9i5RuXqCrhyT32raYwE7r","orgId":"team_3G2eTXErm1EKcAHK55CaYXNj","projectName":"autospheree"}
+{
+  "projectId": "prj_lsDBA5oQjuOIgczHIO4XAmbvWdGN",
+  "orgId": "team_3G2eTXErm1EKcAHK55CaYXNj",
+  "projectName": "autosphere",
+  "settings": {
+    "createdAt": 1776964998905,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
