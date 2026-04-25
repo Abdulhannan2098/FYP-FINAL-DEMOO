@@ -53,11 +53,3 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AUTOSPHERE_PROJECT_ID }}
         run: npx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
 
-      # ── Deploy to autospheree (autospheree-beta.vercel.app – preview URL) ──
-      - name: Deploy to preview – autospheree-beta.vercel.app
-        working-directory: frontend
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: npx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
