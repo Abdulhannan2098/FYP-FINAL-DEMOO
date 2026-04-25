@@ -97,21 +97,14 @@ const VendorRegister = () => {
   // OTP Verification State
   const [showOTPVerification, setShowOTPVerification] = useState(false);
   const [emailOTP, setEmailOTP] = useState(['', '', '', '', '', '']);
-  const [phoneOTP, setPhoneOTP] = useState(['', '', '', '', '', '']);
   const [emailVerified, setEmailVerified] = useState(false);
-  const [phoneVerified, setPhoneVerified] = useState(false);
   const [sendingEmailOTP, setSendingEmailOTP] = useState(false);
-  const [sendingPhoneOTP, setSendingPhoneOTP] = useState(false);
   const [verifyingEmailOTP, setVerifyingEmailOTP] = useState(false);
-  const [verifyingPhoneOTP, setVerifyingPhoneOTP] = useState(false);
   const [emailOTPSent, setEmailOTPSent] = useState(false);
-  const [phoneOTPSent, setPhoneOTPSent] = useState(false);
   const [emailResendTimer, setEmailResendTimer] = useState(0);
-  const [phoneResendTimer, setPhoneResendTimer] = useState(0);
-  const [otpErrors, setOtpErrors] = useState({ email: '', phone: '' });
+  const [otpErrors, setOtpErrors] = useState({ email: '' });
 
   const emailOTPRefs = useRef([]);
-  const phoneOTPRefs = useRef([]);
 
   const { showToast } = useToast();
   const { updateUser } = useAuth();
@@ -127,16 +120,6 @@ const VendorRegister = () => {
     }
     return () => clearInterval(emailInterval);
   }, [emailResendTimer]);
-
-  useEffect(() => {
-    let phoneInterval;
-    if (phoneResendTimer > 0) {
-      phoneInterval = setInterval(() => {
-        setPhoneResendTimer((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(phoneInterval);
-  }, [phoneResendTimer]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -271,50 +254,32 @@ const VendorRegister = () => {
   };
 
   // OTP Input Handlers
-  const handleOTPChange = (type, index, value) => {
-    // Only allow digits
+  const handleOTPChange = (index, value) => {
     if (value && !/^\d$/.test(value)) return;
 
-    const newOTP = type === 'email' ? [...emailOTP] : [...phoneOTP];
+    const newOTP = [...emailOTP];
     newOTP[index] = value;
+    setEmailOTP(newOTP);
+    setOtpErrors({ email: '' });
 
-    if (type === 'email') {
-      setEmailOTP(newOTP);
-      setOtpErrors({ ...otpErrors, email: '' });
-    } else {
-      setPhoneOTP(newOTP);
-      setOtpErrors({ ...otpErrors, phone: '' });
-    }
-
-    // Auto-focus next input
     if (value && index < 5) {
-      const refs = type === 'email' ? emailOTPRefs : phoneOTPRefs;
-      refs.current[index + 1]?.focus();
+      emailOTPRefs.current[index + 1]?.focus();
     }
   };
 
-  const handleOTPKeyDown = (type, index, e) => {
-    const refs = type === 'email' ? emailOTPRefs : phoneOTPRefs;
-    const otp = type === 'email' ? emailOTP : phoneOTP;
-
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      refs.current[index - 1]?.focus();
+  const handleOTPKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !emailOTP[index] && index > 0) {
+      emailOTPRefs.current[index - 1]?.focus();
     }
   };
 
-  const handleOTPPaste = (type, e) => {
+  const handleOTPPaste = (e) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
 
     if (pastedData.length === 6) {
-      const newOTP = pastedData.split('');
-      if (type === 'email') {
-        setEmailOTP(newOTP);
-        setOtpErrors({ ...otpErrors, email: '' });
-      } else {
-        setPhoneOTP(newOTP);
-        setOtpErrors({ ...otpErrors, phone: '' });
-      }
+      setEmailOTP(pastedData.split(''));
+      setOtpErrors({ email: '' });
     }
   };
 
@@ -339,30 +304,6 @@ const VendorRegister = () => {
       showToast(errorMessage, 'error');
     } finally {
       setSendingEmailOTP(false);
-    }
-  };
-
-  // Send Phone OTP
-  const sendPhoneOTP = async () => {
-    setSendingPhoneOTP(true);
-    setOtpErrors({ ...otpErrors, phone: '' });
-
-    try {
-      const response = await api.post('/vendor/pre-register/send-phone-otp', {
-        phone: formData.phone,
-      });
-
-      if (response.data.success) {
-        setPhoneOTPSent(true);
-        setPhoneResendTimer(60);
-        showToast('OTP sent to your phone number', 'success');
-      }
-    } catch (err) {
-      const errorMessage = err.response?.data?.message || 'Failed to send phone OTP';
-      setOtpErrors({ ...otpErrors, phone: errorMessage });
-      showToast(errorMessage, 'error');
-    } finally {
-      setSendingPhoneOTP(false);
     }
   };
 
@@ -395,66 +336,31 @@ const VendorRegister = () => {
     }
   };
 
-  // Verify Phone OTP
-  const verifyPhoneOTP = async () => {
-    const otpCode = phoneOTP.join('');
-    if (otpCode.length !== 6) {
-      setOtpErrors({ ...otpErrors, phone: 'Please enter complete 6-digit OTP' });
-      return;
-    }
-
-    setVerifyingPhoneOTP(true);
-    setOtpErrors({ ...otpErrors, phone: '' });
-
-    try {
-      const response = await api.post('/vendor/pre-register/verify-phone-otp', {
-        phone: formData.phone,
-        otp: otpCode,
-      });
-
-      if (response.data.success) {
-        setPhoneVerified(true);
-        showToast('Phone verified successfully', 'success');
-      }
-    } catch (err) {
-      const errorMessage = err.response?.data?.message || 'Invalid OTP. Please try again.';
-      setOtpErrors({ ...otpErrors, phone: errorMessage });
-    } finally {
-      setVerifyingPhoneOTP(false);
-    }
-  };
-
-  // Initiate OTP verification process
+  // Initiate OTP verification process (email only)
   const initiateOTPVerification = async () => {
     if (!validateStep1()) return;
 
     setShowOTPVerification(true);
-
-    // Send both OTPs simultaneously
-    await Promise.all([sendEmailOTP(), sendPhoneOTP()]);
+    await sendEmailOTP();
   };
 
-  // Proceed to Step 2 after verification
+  // Proceed to Step 2 after email verification
   const proceedAfterVerification = () => {
-    if (emailVerified && phoneVerified) {
+    if (emailVerified) {
       setShowOTPVerification(false);
       setCurrentStep(2);
     } else {
-      showToast('Please verify both email and phone to continue', 'error');
+      showToast('Please verify your email to continue', 'error');
     }
   };
 
   // Go back to edit personal info
   const goBackToPersonalInfo = () => {
     setShowOTPVerification(false);
-    // Reset OTP state
     setEmailOTP(['', '', '', '', '', '']);
-    setPhoneOTP(['', '', '', '', '', '']);
     setEmailVerified(false);
-    setPhoneVerified(false);
     setEmailOTPSent(false);
-    setPhoneOTPSent(false);
-    setOtpErrors({ email: '', phone: '' });
+    setOtpErrors({ email: '' });
   };
 
   const handleNextStep = () => {
@@ -479,9 +385,9 @@ const VendorRegister = () => {
       return;
     }
 
-    // Ensure email and phone were pre-verified
-    if (!emailVerified || !phoneVerified) {
-      showToast('Please complete email and phone verification first', 'error');
+    // Ensure email was pre-verified
+    if (!emailVerified) {
+      showToast('Please complete email verification first', 'error');
       setCurrentStep(1);
       setShowOTPVerification(true);
       return;
@@ -516,8 +422,7 @@ const VendorRegister = () => {
       }
     } catch (err) {
       if (err.response?.data?.code === 'VERIFICATION_REQUIRED') {
-        // Pre-verification not completed - redirect back to OTP screen
-        showToast('Please verify your email and phone first', 'error');
+        showToast('Please verify your email first', 'error');
         setCurrentStep(1);
         setShowOTPVerification(true);
         return;
@@ -640,7 +545,7 @@ const VendorRegister = () => {
               </div>
 
               <p className="text-text-secondary text-sm mb-6">
-                We've sent verification codes to your email and phone. Please enter them below to continue.
+                We've sent a verification code to your email. Please enter it below to continue.
               </p>
 
               <div className="space-y-8">
@@ -684,9 +589,9 @@ const VendorRegister = () => {
                             inputMode="numeric"
                             maxLength={1}
                             value={digit}
-                            onChange={(e) => handleOTPChange('email', index, e.target.value)}
-                            onKeyDown={(e) => handleOTPKeyDown('email', index, e)}
-                            onPaste={(e) => handleOTPPaste('email', e)}
+                            onChange={(e) => handleOTPChange(index, e.target.value)}
+                            onKeyDown={(e) => handleOTPKeyDown(index, e)}
+                            onPaste={handleOTPPaste}
                             className={`w-12 h-14 text-center text-xl font-semibold rounded-lg border-2 bg-secondary-800 text-text-primary focus:outline-none focus:border-primary-500 transition-colors ${
                               otpErrors.email ? 'border-red-500' : 'border-surface-light'
                             }`}
@@ -743,104 +648,6 @@ const VendorRegister = () => {
                   )}
                 </div>
 
-                {/* Phone OTP Section */}
-                <div className={`p-5 rounded-xl border-2 transition-all ${
-                  phoneVerified
-                    ? 'border-green-500/50 bg-green-500/5'
-                    : 'border-surface-light'
-                }`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        phoneVerified ? 'bg-green-500' : 'bg-primary-500/20'
-                      }`}>
-                        {phoneVerified ? (
-                          <CheckCircle className="w-5 h-5 text-white" />
-                        ) : (
-                          <Phone className="w-5 h-5 text-primary-400" />
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-text-primary">Phone Verification</h4>
-                        <p className="text-xs text-text-tertiary">{formData.phone}</p>
-                      </div>
-                    </div>
-                    {phoneVerified && (
-                      <span className="text-green-400 text-sm font-medium flex items-center gap-1">
-                        <CheckCircle className="w-4 h-4" /> Verified
-                      </span>
-                    )}
-                  </div>
-
-                  {!phoneVerified && (
-                    <>
-                      <div className="flex justify-center gap-2 mb-4">
-                        {phoneOTP.map((digit, index) => (
-                          <input
-                            key={index}
-                            ref={(el) => (phoneOTPRefs.current[index] = el)}
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={1}
-                            value={digit}
-                            onChange={(e) => handleOTPChange('phone', index, e.target.value)}
-                            onKeyDown={(e) => handleOTPKeyDown('phone', index, e)}
-                            onPaste={(e) => handleOTPPaste('phone', e)}
-                            className={`w-12 h-14 text-center text-xl font-semibold rounded-lg border-2 bg-secondary-800 text-text-primary focus:outline-none focus:border-primary-500 transition-colors ${
-                              otpErrors.phone ? 'border-red-500' : 'border-surface-light'
-                            }`}
-                          />
-                        ))}
-                      </div>
-
-                      {otpErrors.phone && (
-                        <p className="text-red-400 text-sm text-center mb-3">{otpErrors.phone}</p>
-                      )}
-
-                      <div className="flex items-center justify-between">
-                        <button
-                          type="button"
-                          onClick={sendPhoneOTP}
-                          disabled={sendingPhoneOTP || phoneResendTimer > 0}
-                          className="text-sm text-primary-400 hover:text-primary-300 disabled:text-text-tertiary disabled:cursor-not-allowed flex items-center gap-1"
-                        >
-                          {sendingPhoneOTP ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Sending...
-                            </>
-                          ) : phoneResendTimer > 0 ? (
-                            <>
-                              <RefreshCw className="w-4 h-4" />
-                              Resend in {phoneResendTimer}s
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="w-4 h-4" />
-                              Resend OTP
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={verifyPhoneOTP}
-                          disabled={verifyingPhoneOTP || phoneOTP.join('').length !== 6}
-                          className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 disabled:bg-surface-light disabled:text-text-tertiary disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                        >
-                          {verifyingPhoneOTP ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Verifying...
-                            </>
-                          ) : (
-                            'Verify Phone'
-                          )}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
               </div>
 
               {/* Action Buttons */}
@@ -855,20 +662,20 @@ const VendorRegister = () => {
                 <button
                   type="button"
                   onClick={proceedAfterVerification}
-                  disabled={!emailVerified || !phoneVerified}
+                  disabled={!emailVerified}
                   className={`flex-1 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                    emailVerified && phoneVerified
+                    emailVerified
                       ? 'bg-green-500 text-white hover:bg-green-600'
                       : 'bg-surface-light text-text-tertiary cursor-not-allowed'
                   }`}
                 >
-                  {emailVerified && phoneVerified ? (
+                  {emailVerified ? (
                     <>
                       <CheckCircle className="w-5 h-5" />
                       Continue to Business Details
                     </>
                   ) : (
-                    'Verify Both to Continue'
+                    'Verify Email to Continue'
                   )}
                 </button>
               </div>
@@ -876,8 +683,7 @@ const VendorRegister = () => {
               {/* Info Box */}
               <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
                 <p className="text-sm text-blue-300">
-                  <strong>Didn't receive OTP?</strong> Check your spam folder for email OTP.
-                  SMS might take a few moments to arrive depending on network conditions.
+                  <strong>Didn't receive the OTP?</strong> Check your spam/junk folder. You can resend after 60 seconds.
                 </p>
               </div>
             </div>
@@ -950,7 +756,7 @@ const VendorRegister = () => {
                       />
                     </div>
                     {errors.phone && <p className="mt-1 text-sm text-red-400">{errors.phone}</p>}
-                    <p className="mt-1 text-xs text-text-tertiary">OTP will be sent for verification</p>
+                    <p className="mt-1 text-xs text-text-tertiary">Stored for contact purposes</p>
                   </div>
 
                   {/* Email */}
@@ -1299,10 +1105,6 @@ const VendorRegister = () => {
                     <li className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-green-400" />
                       <span className="text-green-300">Email verified</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                      <span className="text-green-300">Phone verified</span>
                     </li>
                     <li>→ Upload CNIC (front & back) for identity verification</li>
                     <li>→ Get verified and start selling!</li>
