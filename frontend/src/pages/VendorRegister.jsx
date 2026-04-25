@@ -756,7 +756,6 @@ const VendorRegister = () => {
                       />
                     </div>
                     {errors.phone && <p className="mt-1 text-sm text-red-400">{errors.phone}</p>}
-                    <p className="mt-1 text-xs text-text-tertiary">Stored for contact purposes</p>
                   </div>
 
                   {/* Email */}
