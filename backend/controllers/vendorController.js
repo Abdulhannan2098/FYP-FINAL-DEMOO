@@ -527,15 +527,13 @@ exports.registerVendor = async (req, res, next) => {
       }
     }
 
-    // Check if email and phone were pre-verified during registration flow
+    // Check if email was pre-verified during registration flow (phone verification is optional)
     const preRegStatus = exports.isPreRegVerified(email, phone);
-    const isPreVerified = preRegStatus.emailVerified && preRegStatus.phoneVerified;
 
-    // If not pre-verified, require OTP verification
-    if (!isPreVerified) {
+    if (!preRegStatus.emailVerified) {
       return res.status(400).json({
         success: false,
-        message: 'Please verify your email and phone number before completing registration',
+        message: 'Please verify your email address before completing registration',
         code: 'VERIFICATION_REQUIRED',
         data: {
           emailVerified: preRegStatus.emailVerified,
@@ -544,7 +542,7 @@ exports.registerVendor = async (req, res, next) => {
       });
     }
 
-    // Create vendor with pre-verified status
+    // Create vendor — phone stored but marked unverified (can be verified later)
     const vendor = await User.create({
       name,
       email: normalizedEmail,
@@ -559,8 +557,8 @@ exports.registerVendor = async (req, res, next) => {
       businessAddress,
       accessoryCategory,
       hasPhysicalStore: hasPhysicalStore || false,
-      emailVerified: true,  // Pre-verified during registration
-      phoneVerified: true,  // Pre-verified during registration
+      emailVerified: true,   // Pre-verified during registration
+      phoneVerified: false,  // Stored but not verified; can be verified later
       vendorStatus: 'unverified', // Still needs CNIC/selfie verification
     });
 

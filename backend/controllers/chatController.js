@@ -830,7 +830,7 @@ exports.uploadFileMessage = async (req, res) => {
     console.error('Error uploading file:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to upload file',
+      message: 'Failed to jbj',
       error: error.message
     });
   }

@@ -1,0 +1,47 @@
+name: Backend Test & Deploy
+
+on:
+  push:
+    paths:
+      - "backend/**"
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Newman
+        run: npm install -g newman newman-reporter-htmlextra
+
+      - name: Run Postman tests
+        continue-on-error: true
+        run: |
+          newman run Postman_Collection_Complete_API_Tests.json \
+            --env-var "base_url=${{ secrets.BACKEND_BASE_URL }}" \
+            --env-var "register_email=testuser_${{ github.run_id }}@example.com" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export newman-report.html \
+            --suppress-exit-code
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report
+          path: newman-report.html
+
+      - name: Deploy to Vercel
+        working-directory: backend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_BACKEND_PROJECT_ID }}
+        run: npx vercel --prod --token=$VERCEL_TOKEN

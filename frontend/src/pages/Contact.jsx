@@ -63,7 +63,7 @@ const Contact = () => {
 
                 <div>
                   <label className="block text-sm font-semibold text-text-primary mb-2">
-                    Email Address
+                    Email
                   </label>
                   <input
                     type="email"
