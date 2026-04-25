@@ -1,0 +1,92 @@
+name: Deploy Microservices to HuggingFace Spaces
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "microservices/**"
+  workflow_dispatch:
+
+jobs:
+  deploy-notification-service:
+    name: Deploy Notification Service → Space2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Clone HuggingFace Space2
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git clone https://Hannan005:${HF_TOKEN}@huggingface.co/spaces/Hannan005/Space2 /tmp/space2
+
+      - name: Sync notification-service files
+        run: |
+          rsync -av --delete \
+            --exclude='.env' \
+            --exclude='__pycache__/' \
+            --exclude='*.pyc' \
+            --exclude='.git/' \
+            microservices/notification-service/ /tmp/space2/
+
+      - name: Commit and push to Space2
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd /tmp/space2
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to deploy for notification-service"
+          else
+            git commit -m "deploy: sync notification-service from GitHub Actions"
+            git push https://Hannan005:${HF_TOKEN}@huggingface.co/spaces/Hannan005/Space2 main
+            echo "Notification service deployed to Space2 successfully"
+          fi
+
+  deploy-analytics-service:
+    name: Deploy Analytics Service → space3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Clone HuggingFace space3
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git clone https://Hannan005:${HF_TOKEN}@huggingface.co/spaces/Hannan005/space3 /tmp/space3
+
+      - name: Sync analytics-service files
+        run: |
+          rsync -av --delete \
+            --exclude='.env' \
+            --exclude='__pycache__/' \
+            --exclude='*.pyc' \
+            --exclude='.git/' \
+            microservices/analytics-service/ /tmp/space3/
+
+      - name: Commit and push to space3
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd /tmp/space3
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to deploy for analytics-service"
+          else
+            git commit -m "deploy: sync analytics-service from GitHub Actions"
+            git push https://Hannan005:${HF_TOKEN}@huggingface.co/spaces/Hannan005/space3 main
+            echo "Analytics service deployed to space3 successfully"
+          fi

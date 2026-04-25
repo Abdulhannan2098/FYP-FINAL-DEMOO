@@ -1,8 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # docker-compose.microservices.yml
 #
-# Runs ONLY the two Python microservices.
-# The Node.js monolith continues to run normally (npm start / npm run dev).
+# Runs ONLY the two Python microservices locally.
+# The Node.js monolith continues running via:  npm start / npm run dev
+#
+# PORT is overridden to 8001/8002 here so local dev stays on familiar ports.
+# On HuggingFace Spaces the Dockerfile default ENV PORT=7860 is used instead.
 #
 # Usage:
 #   docker compose -f docker-compose.microservices.yml up --build
@@ -13,7 +16,8 @@ version: "3.9"
 
 services:
 
-  # ── Notification Service (port 8001) ──────────────────────────────────────
+  # ── Notification Service ──────────────────────────────────────────────────
+  # Local: http://localhost:8001  |  HF Spaces: port 7860 (set by Dockerfile)
   notification-service:
     build:
       context: ./microservices/notification-service
@@ -43,7 +47,8 @@ services:
       timeout: 5s
       retries: 3
 
-  # ── Analytics Service (port 8002) ─────────────────────────────────────────
+  # ── Analytics Service ─────────────────────────────────────────────────────
+  # Local: http://localhost:8002  |  HF Spaces: port 7860 (set by Dockerfile)
   analytics-service:
     build:
       context: ./microservices/analytics-service

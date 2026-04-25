@@ -7,6 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8002
+# HuggingFace Spaces requires port 7860.
+# For local dev, docker-compose overrides PORT back to 8002.
+ENV PORT=7860
+EXPOSE 7860
 
 CMD ["python", "main.py"]
