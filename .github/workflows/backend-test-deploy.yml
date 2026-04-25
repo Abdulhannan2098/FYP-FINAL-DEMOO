@@ -25,7 +25,8 @@ jobs:
         continue-on-error: true
         run: |
           newman run Postman_Collection_Complete_API_Tests.json \
-            --env-var "baseUrl=${{ secrets.BACKEND_BASE_URL }}" \
+            --env-var "base_url=${{ secrets.BACKEND_BASE_URL }}" \
+            --env-var "register_email=testuser_${{ github.run_id }}@example.com" \
             --reporters cli,htmlextra \
             --reporter-htmlextra-export newman-report.html \
             --suppress-exit-code
