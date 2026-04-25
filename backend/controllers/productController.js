@@ -3,7 +3,7 @@ const AIFeedback = require('../models/AIFeedback');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+const { uploadBuffer } = require('../utils/cloudinaryUpload');
 const { sendVendorProductApprovedEmail, sendVendorProductRejectedEmail, sendVendorProductDeletedEmail } = require('../utils/emailService');
 const { validateProduct: aiValidateProduct } = require('../services/productAIValidator');
 
@@ -27,21 +27,6 @@ function isDuplicateSubmission(vendorId, productName) {
   _recentSubmissions.set(key, now + DEDUP_TTL_MS);
   return false;
 }
-
-// Configure multer for product image uploads
-const productStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = 'uploads/products';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'product-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
 
 const imageFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png/;
@@ -102,8 +87,9 @@ const mergeModel3D = (currentModel = {}, updates = {}) => {
   return nextModel;
 };
 
+// Use memory storage — Vercel's filesystem is read-only; images are uploaded to Cloudinary.
 exports.uploadProductImages = multer({
-  storage: productStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB per image
   fileFilter: imageFilter
 });
@@ -137,25 +123,27 @@ exports.createProduct = async (req, res, next) => {
 
     // ── Duplicate submission guard ──────────────────────────────────────────
     if (isDuplicateSubmission(req.user.id, name)) {
-      // Clean up any uploaded files before returning
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => { try { fs.unlinkSync(file.path); } catch (_) {} });
-      }
       return res.status(429).json({
         success: false,
         message: 'Duplicate submission detected. Your product was already received — please wait a moment before trying again.',
       });
     }
 
-    // Handle images - either from file upload or URLs from body
+    // Handle images — upload buffers to Cloudinary or accept pre-supplied URLs
     let imageUrls = [];
-    
+
     if (req.files && req.files.length > 0) {
-      // Images uploaded as files - store file paths
-      imageUrls = req.files.map(file => `/${file.path.replace(/\\/g, '/')}`);
-      console.log('Image URLs generated:', imageUrls);
+      const uploads = await Promise.all(
+        req.files.map(file =>
+          uploadBuffer(file.buffer, {
+            folder: 'autosphere/products',
+            resource_type: 'image',
+          })
+        )
+      );
+      imageUrls = uploads.map(result => result.secure_url);
+      console.log('Image URLs generated (Cloudinary):', imageUrls);
     } else if (req.body.images) {
-      // Images provided as URLs (for backward compatibility or external URLs)
       imageUrls = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
       console.log('Using provided URLs:', imageUrls);
     }
@@ -261,14 +249,6 @@ exports.createProduct = async (req, res, next) => {
     });
   } catch (error) {
     console.error('BACKEND ERROR:', error);
-    // Clean up uploaded files if product creation fails
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-        }
-      });
-    }
     next(error);
   }
 };
@@ -540,22 +520,7 @@ exports.deleteProduct = async (req, res, next) => {
       }
     }
 
-    // Clean up uploaded image files (only local uploads, not external URLs)
-    if (product.images && product.images.length > 0) {
-      product.images.forEach(imagePath => {
-        // Only delete files from our uploads directory
-        if (imagePath.startsWith('/uploads/products/')) {
-          const fullPath = path.join(__dirname, '..', imagePath);
-          if (fs.existsSync(fullPath)) {
-            try {
-              fs.unlinkSync(fullPath);
-            } catch (err) {
-              console.error('Error deleting image file:', err);
-            }
-          }
-        }
-      });
-    }
+    // Images are stored on Cloudinary — no local file cleanup needed.
 
     await product.deleteOne();
 

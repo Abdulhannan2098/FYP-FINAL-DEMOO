@@ -1,7 +1,11 @@
 const crypto = require('crypto');
+const https = require('https');
+const http = require('http');
+const os = require('os');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { uploadBuffer } = require('../utils/cloudinaryUpload');
 const { validationResult } = require('express-validator');
 const User = require('../models/user');
 const Session = require('../models/Session');
@@ -15,6 +19,25 @@ const {
 } = require('../utils/emailService');
 const { sendPhoneVerificationOTP, sendVerificationStatusSMS } = require('../services/smsService');
 const { extractSessionInfo } = require('../utils/sessionHelper');
+
+/**
+ * Download a remote URL (Cloudinary CDN) to a local /tmp file for OCR processing.
+ * Returns the local file path.
+ */
+const downloadToTmp = (url, filename) => {
+  const destPath = path.join(os.tmpdir(), filename);
+  return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https://') ? https : http;
+    const file = fs.createWriteStream(destPath);
+    protocol.get(url, (response) => {
+      response.pipe(file);
+      file.on('finish', () => file.close(() => resolve(destPath)));
+    }).on('error', (err) => {
+      try { fs.unlinkSync(destPath); } catch (_) {}
+      reject(err);
+    });
+  });
+};
 
 const verificationFileFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png/;
@@ -919,32 +942,26 @@ exports.uploadCNIC = async (req, res, next) => {
       });
     }
 
-    // Write received buffers to disk manually.
-    // Pre-deleting the old files before writing avoids the Windows file-lock
-    // (UV_EUNKNOWN / errno -4094) that occurs when multer diskStorage tries to
-    // open a path that is still held by a previous failed write or AV scan.
-    const uploadDir = 'uploads/verification';
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-    const userId = req.user.id;
-    const frontPath = `${uploadDir}/${userId}-cnicFront.jpg`;
-    const backPath  = `${uploadDir}/${userId}-cnicBack.jpg`;
-
-    for (const p of [frontPath, backPath]) {
-      try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
-    }
-
-    fs.writeFileSync(frontPath, req.files.cnicFront[0].buffer);
-    fs.writeFileSync(backPath,  req.files.cnicBack[0].buffer);
+    // Upload CNIC images to Cloudinary — no local filesystem writes needed.
+    const [frontResult, backResult] = await Promise.all([
+      uploadBuffer(req.files.cnicFront[0].buffer, {
+        folder: 'autosphere/verification',
+        resource_type: 'image',
+      }),
+      uploadBuffer(req.files.cnicBack[0].buffer, {
+        folder: 'autosphere/verification',
+        resource_type: 'image',
+      }),
+    ]);
 
     // Initialize vendorVerification if not exists
     if (!user.vendorVerification) {
       user.vendorVerification = {};
     }
 
-    // Store file paths
-    user.vendorVerification.cnicFront = frontPath;
-    user.vendorVerification.cnicBack  = backPath;
+    // Store Cloudinary CDN URLs
+    user.vendorVerification.cnicFront = frontResult.secure_url;
+    user.vendorVerification.cnicBack  = backResult.secure_url;
     user.vendorStatus = 'pending_verification';
 
     await user.save({ validateBeforeSave: false });
@@ -1019,12 +1036,28 @@ exports.processVerification = async (req, res, next) => {
     console.log(`[VERIFICATION] Processing attempt #${verification.verificationAttempts} for user: ${user._id}`);
     console.log(`${'='.repeat(60)}`);
 
-    // Run 3-step verification (CNIC extraction, name verification, CNIC number verification)
-    const result = await verificationService.runStepByStepVerification({
-      cnicFrontPath: verification.cnicFront,
-      registeredCNIC: user.cnicNumber,
-      registeredName: user.name,
-    });
+    // Download CNIC front image to /tmp for Tesseract OCR (Cloudinary URLs are not local paths)
+    let cnicFrontPath = verification.cnicFront;
+    let tmpFileToCleanup = null;
+    if (cnicFrontPath && /^https?:\/\//i.test(cnicFrontPath)) {
+      const tmpFilename = `${user._id}-cnicFront-${Date.now()}.jpg`;
+      cnicFrontPath = await downloadToTmp(cnicFrontPath, tmpFilename);
+      tmpFileToCleanup = cnicFrontPath;
+    }
+
+    let result;
+    try {
+      result = await verificationService.runStepByStepVerification({
+        cnicFrontPath,
+        registeredCNIC: user.cnicNumber,
+        registeredName: user.name,
+      });
+    } finally {
+      // Clean up tmp file regardless of success/failure
+      if (tmpFileToCleanup) {
+        try { fs.unlinkSync(tmpFileToCleanup); } catch (_) {}
+      }
+    }
 
     // Store attempt in log
     if (!verification.attemptLog) verification.attemptLog = [];

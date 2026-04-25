@@ -4,7 +4,7 @@ const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+const { uploadBuffer } = require('../utils/cloudinaryUpload');
 const { validationResult } = require('express-validator');
 const User = require('../models/user');
 const Session = require('../models/Session');
@@ -19,21 +19,6 @@ const {
 } = require('../utils/emailService');
 const { extractSessionInfo } = require('../utils/sessionHelper');
 
-// Configure multer for profile image uploads
-const profileStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = 'uploads/profiles';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'profile-' + req.user.id + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
 const profileImageFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|webp/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -46,8 +31,9 @@ const profileImageFilter = (req, file, cb) => {
   }
 };
 
+// Use memory storage — images are uploaded to Cloudinary, not local disk.
 exports.uploadProfileImage = multer({
-  storage: profileStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for profile images
   fileFilter: profileImageFilter
 });
@@ -883,33 +869,19 @@ exports.updateProfile = async (req, res, next) => {
     const user = await User.findById(req.user.id);
 
     if (!user) {
-      // Clean up uploaded file if user not found
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
       return res.status(404).json({
         success: false,
         message: 'User not found',
       });
     }
 
-    // Handle profile image upload
+    // Handle profile image upload — upload buffer to Cloudinary
     if (req.file) {
-      // Delete old profile image if it exists
-      if (user.profileImage) {
-        const oldImagePath = user.profileImage.startsWith('/')
-          ? user.profileImage.substring(1)
-          : user.profileImage;
-        if (fs.existsSync(oldImagePath)) {
-          try {
-            fs.unlinkSync(oldImagePath);
-          } catch (err) {
-            console.error('Error deleting old profile image:', err);
-          }
-        }
-      }
-      // Store the new image path
-      user.profileImage = '/' + req.file.path.replace(/\\/g, '/');
+      const result = await uploadBuffer(req.file.buffer, {
+        folder: 'autosphere/profiles',
+        resource_type: 'image',
+      });
+      user.profileImage = result.secure_url;
     }
 
     // Update other fields if provided (from form data or JSON body)

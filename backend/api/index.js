@@ -85,21 +85,8 @@ if (env.NODE_ENV === 'production') {
   app.use('/api', generalLimiter);
 }
 
-// Serve uploaded files statically.
-// Important: allow cross-origin resource loading in the browser (CORP) for images.
-const uploadsCorsOptions = env.NODE_ENV === 'production'
-  ? { origin: env.CORS_ORIGIN, credentials: false }
-  : { origin: true, credentials: false };
-
-app.use(
-  '/uploads',
-  cors(uploadsCorsOptions),
-  (req, res, next) => {
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    next();
-  },
-  express.static('uploads')
-);
+// Note: local /uploads static serving is intentionally removed.
+// All images are stored on Cloudinary and served via CDN URLs.
 
 // API Routes
 app.use('/api/auth', authRoutes);
