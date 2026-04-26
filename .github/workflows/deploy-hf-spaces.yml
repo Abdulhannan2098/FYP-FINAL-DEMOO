@@ -16,16 +16,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure Git
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      - name: Clone HuggingFace Space2
+      - name: Configure Git identity and HF credentials
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git clone https://Hannan005:${HF_TOKEN}@huggingface.co/spaces/Hannan005/Space2 /tmp/space2
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global credential.helper store
+          echo "https://Hannan005:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
+
+      - name: Clone HuggingFace Space2
+        run: |
+          git clone https://huggingface.co/spaces/Hannan005/Space2 /tmp/space2
 
       - name: Sync notification-service files
         run: |
@@ -37,8 +39,6 @@ jobs:
             microservices/notification-service/ /tmp/space2/
 
       - name: Commit and push to Space2
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd /tmp/space2
           git add -A
@@ -46,7 +46,7 @@ jobs:
             echo "No changes to deploy for notification-service"
           else
             git commit -m "deploy: sync notification-service from GitHub Actions"
-            git push https://Hannan005:${HF_TOKEN}@huggingface.co/spaces/Hannan005/Space2 main
+            git push origin main
             echo "Notification service deployed to Space2 successfully"
           fi
 
@@ -57,16 +57,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure Git
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      - name: Clone HuggingFace space3
+      - name: Configure Git identity and HF credentials
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git clone https://Hannan005:${HF_TOKEN}@huggingface.co/spaces/Hannan005/space3 /tmp/space3
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global credential.helper store
+          echo "https://Hannan005:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
+
+      - name: Clone HuggingFace space3
+        run: |
+          git clone https://huggingface.co/spaces/Hannan005/space3 /tmp/space3
 
       - name: Sync analytics-service files
         run: |
@@ -78,8 +80,6 @@ jobs:
             microservices/analytics-service/ /tmp/space3/
 
       - name: Commit and push to space3
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd /tmp/space3
           git add -A
@@ -87,6 +87,6 @@ jobs:
             echo "No changes to deploy for analytics-service"
           else
             git commit -m "deploy: sync analytics-service from GitHub Actions"
-            git push https://Hannan005:${HF_TOKEN}@huggingface.co/spaces/Hannan005/space3 main
+            git push origin main
             echo "Analytics service deployed to space3 successfully"
           fi
